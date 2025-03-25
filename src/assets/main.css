@@ -1,0 +1,9 @@
+html, body, #app {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+.p-button {
+    font-size: 16px !important; /* Применение через !important */
+}
