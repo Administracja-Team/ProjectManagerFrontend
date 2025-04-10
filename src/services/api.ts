@@ -44,3 +44,73 @@ export const loginUser = async (identifier: string, password: string) => {
         throw error;
     }
 };
+
+export const getUserData = async () => {
+    try {
+        // Получаем токен из localStorage
+        const token = localStorage.getItem("access_token");
+        console.log("Token:", token); // Проверьте, какой токен передается в запрос
+
+        // Если токен есть, добавляем его в заголовок Authorization
+        const response = await api.get("/user", {
+            headers: {
+                Authorization: `Bearer ${token}` // Добавляем токен в заголовок
+            }
+        });
+
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch user data:", error);
+        throw error; // Пробрасываем ошибку дальше
+    }
+};
+
+// Новая функция для обновления профиля пользователя
+export const updateUserProfile = async (profileData: Partial<{
+    name: string;
+    surname: string;
+    username: string;
+    email: string;
+    description: string,
+    language_code: string;
+}>) => {
+    try {
+        const response = await api.post("/user", profileData, {
+            headers: {
+                "Content-Type": "application/json"
+            }
+        });
+        return response.data; // Ожидаем 204 (No Content), поэтому данные могут быть пустыми
+    } catch (error) {
+        console.error("Failed to update user profile:", error.response?.data || error);
+        throw error;
+    }
+};
+
+export const createProject = async (projectData: {
+    name: string;
+    description: string; // Заменил goal на description
+}) => {
+    try {
+        const response = await api.post("/project/create", projectData, {
+            headers: {
+                "Content-Type": "application/json"
+            }
+        });
+        return response.data; // Возвращает ProjectMemberDTO
+    } catch (error) {
+        console.error("Failed to create project:", error.response?.data || error);
+        throw error;
+    }
+};
+
+// Новая функция для получения всех проектов пользователя
+export const getAllUserProjects = async () => {
+    try {
+        const response = await api.get("/project/list");
+        return response.data; // Возвращает массив ProjectMemberDTO
+    } catch (error) {
+        console.error("Failed to fetch projects:", error.response?.data || error);
+        throw error;
+    }
+}

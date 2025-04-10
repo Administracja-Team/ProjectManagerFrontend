@@ -89,6 +89,10 @@ const login = async () => {
         localStorage.setItem('expires_at', response.expires_at);
       }
 
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('refresh_token', response.refresh_token);
+      localStorage.setItem('expires_at', response.expires_at);
+
       // Перенаправляем пользователя на главную страницу или другую
       router.push('/home');
       

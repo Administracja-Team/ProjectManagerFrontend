@@ -9,6 +9,7 @@ import i18n from "./i18n";
 import router from './router'; // Добавляем маршрутизацию
 import ToastService from 'primevue/toastservice'; // Импортируем ToastService
 import Toast from 'primevue/toast';
+import 'primeicons/primeicons.css';
 
 const MyPreset = definePreset(Aura, {
     semantic: {
@@ -36,6 +37,9 @@ const MyPreset = definePreset(Aura, {
             label:{
                 fontWeight: "800"
             },
+         },
+         dialog:{
+            headerGap: "100px",
          }
     }
 });

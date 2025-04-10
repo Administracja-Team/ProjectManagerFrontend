@@ -7,3 +7,7 @@ html, body, #app {
 .p-button {
     font-size: 16px !important; /* Применение через !important */
 }
+
+.p-progressspinner-spin{
+    animation: none;
+}
