@@ -1,14 +1,15 @@
+<!-- src/components/Dashboard.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import { useRouter } from 'vue-router';
-import { getUserData, getAllUserProjects } from '../services/api';
+import { getUserData, getAllUserProjects, connectToProject } from '../services/api';
 import InputText from 'primevue/inputtext';
 import ProgressCircle from './ProgressCircle.vue';
 import ProfileDialog from './ProfileDialog.vue';
 import CreateProjectDialog from './CreateProjectDialog.vue';
-import ProjectDialog from './ProjectDialog.vue'; // Новый импорт
+import ProjectDialog from './ProjectDialog.vue';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 
@@ -26,11 +27,11 @@ const userData = ref({
 
 const dialogVisible = ref(false);
 const createDialogVisible = ref(false);
-const projectDialogVisible = ref(false); // Для диалога проекта
-const selectedProject = ref(null); // Выбранный проект
+const projectDialogVisible = ref(false);
+const selectedProjectId = ref(null);
+const invitationCode = ref(''); // Для хранения введённого кода
 
 const projects = ref([]);
-
 const gridContainer = ref(null);
 
 const fetchUserData = async () => {
@@ -68,6 +69,28 @@ const fetchProjects = async () => {
     }
 };
 
+const joinProject = async () => {
+    if (!invitationCode.value.trim()) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please enter an invitation code', life: 3000 });
+        return;
+    }
+    try {
+        await connectToProject(invitationCode.value);
+        toast.add({ severity: 'success', summary: 'Success', detail: 'Successfully connected to project', life: 3000 });
+        invitationCode.value = ''; // Очищаем поле
+        await fetchProjects(); // Обновляем список проектов
+    } catch (error) {
+        const status = error.response?.status;
+        if (status === 404) {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Invitation code not found', life: 3000 });
+        } else if (status === 409) {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'You are already connected to this project', life: 3000 });
+        } else {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to connect to project', life: 3000 });
+        }
+    }
+};
+
 onMounted(() => {
     fetchUserData();
     fetchProjects();
@@ -96,7 +119,7 @@ const scrollRight = () => {
 const showArrows = () => projects.value.length > 10;
 
 const openProjectDialog = (project) => {
-    selectedProject.value = project;
+    selectedProjectId.value = project.projectId;
     projectDialogVisible.value = true;
 };
 
@@ -107,7 +130,7 @@ const gotoProfile = () => {
 const handleSave = (data) => {
     userData.value.name = data.name || userData.value.name;
     userData.value.surname = data.surname || userData.value.surname;
-    userData.value.username = data.username || userData.username;
+    userData.value.username = data.username || userData.value.username;
     userData.value.email = data.email || userData.value.email;
     userData.value.avatar = data.avatar || userData.value.avatar;
     console.log('Profile updated:', userData.value);
@@ -180,10 +203,10 @@ const handleCreateProject = (projectData) => {
                     <div class="input-container">
                         <div class="input-space"></div>
                         <div class="input-wrapper">
-                            <InputText class="project-input" placeholder="Put ID of a project" />
+                            <InputText v-model="invitationCode" class="project-input" placeholder="Put ID of a project" />
                         </div>
                         <div class="button-wrapper">
-                            <Button icon="pi pi-arrow-right" class="input-button" />
+                            <Button icon="pi pi-arrow-right" class="input-button" @click="joinProject" />
                         </div>
                     </div>
                 </div>
@@ -210,7 +233,7 @@ const handleCreateProject = (projectData) => {
 
         <ProjectDialog 
             :show="projectDialogVisible" 
-            :project="selectedProject" 
+            :project-id="selectedProjectId" 
             @update:show="projectDialogVisible = $event" 
         />
 

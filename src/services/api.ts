@@ -65,6 +65,17 @@ export const getUserData = async () => {
     }
 };
 
+// Новая функция для получения аватара
+export const getUserAvatar = async () => {
+    try {
+        const response = await api.get("/user/avatar", { responseType: 'blob' });
+        return URL.createObjectURL(response.data); // Конвертируем blob в URL
+    } catch (error) {
+        console.error("Failed to fetch user avatar:", error.response?.data || error);
+        throw error;
+    }
+};
+
 // Новая функция для обновления профиля пользователя
 export const updateUserProfile = async (profileData: Partial<{
     name: string;
@@ -89,7 +100,7 @@ export const updateUserProfile = async (profileData: Partial<{
 
 export const createProject = async (projectData: {
     name: string;
-    description: string; // Заменил goal на description
+    description: string;
 }) => {
     try {
         const response = await api.post("/project/create", projectData, {
@@ -114,3 +125,36 @@ export const getAllUserProjects = async () => {
         throw error;
     }
 }
+
+// Новая функция для получения деталей проекта
+export const getProjectDetails = async (projectId: number) => {
+    try {
+        const response = await api.get(`/project/${projectId}`);
+        return response.data; // ProjectMemberDTO
+    } catch (error) {
+        console.error(`Failed to fetch project ${projectId}:`, error.response?.data || error);
+        throw error;
+    }
+};
+
+// Новая функция для создания кода приглашения
+export const createInvitationCode = async (projectId: number) => {
+    try {
+        const response = await api.post(`/project/${projectId}/code/create`);
+        return response.data; // { code: string, created_at: string, expires_at: string }
+    } catch (error) {
+        console.error(`Failed to create invitation code for project ${projectId}:`, error.response?.data || error);
+        throw error;
+    }
+};
+
+// Новая функция для подключения к проекту по коду
+export const connectToProject = async (code: string) => {
+    try {
+        const response = await api.post(`/project/connect/${code}`);
+        return response.data; // ProjectMemberDTO
+    } catch (error) {
+        console.error(`Failed to connect to project with code ${code}:`, error.response?.data || error);
+        throw error;
+    }
+};
