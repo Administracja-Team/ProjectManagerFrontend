@@ -18,7 +18,6 @@ api.interceptors.request.use(config => {
 
 export default api;
 
-
 export const registerUser = async (userData: any, avatarFile?: File) => {
     const formData = new FormData();
     formData.append("user", JSON.stringify(userData));
@@ -124,7 +123,7 @@ export const getAllUserProjects = async () => {
         console.error("Failed to fetch projects:", error.response?.data || error);
         throw error;
     }
-}
+};
 
 // Новая функция для получения деталей проекта
 export const getProjectDetails = async (projectId: number) => {
@@ -155,6 +154,44 @@ export const connectToProject = async (code: string) => {
         return response.data; // ProjectMemberDTO
     } catch (error) {
         console.error(`Failed to connect to project with code ${code}:`, error.response?.data || error);
+        throw error;
+    }
+};
+
+export const setSystemRole = async (memberId: number, role: 'MEMBER' | 'ADMIN') => {
+    try {
+        const response = await api.patch(`/project/member/${memberId}/system-role`, { payload: role });
+        console.log(`Set system role for member ${memberId}:`, {
+            status: response.status,
+            data: response.data
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error(`Failed to set system role for member ${memberId}:`, {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message,
+            error: error
+        });
+        throw error;
+    }
+};
+
+export const setDescriptiveRole = async (memberId: number, role: string) => {
+    try {
+        const response = await api.post(`/project/member/${memberId}/descriptive-role`, { payload: role });
+        console.log(`Set descriptive role for member ${memberId}:`, {
+            status: response.status,
+            data: response.data
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error(`Failed to set descriptive role for member ${memberId}:`, {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message,
+            error: error
+        });
         throw error;
     }
 };

@@ -77,7 +77,6 @@ const sprintStartDate = ref(null);
 const sprintEndDate = ref(null);
 const showTaskForm = ref(false);
 
-// Данные участников из ProjectDialog.vue (предполагается, что они передаются через props)
 const props = defineProps({
     projectData: { type: Object, default: () => ({}) },
 });
@@ -89,6 +88,7 @@ const participants = computed(() => {
             username: props.projectData.owner,
             name: props.projectData.ownerFullName || props.projectData.owner,
             system_role: 'OWNER',
+            member_id: null, // member_id для owner недоступен
         });
     }
     if (props.projectData.others?.length) {
@@ -96,6 +96,7 @@ const participants = computed(() => {
             username: member.user.username,
             name: `${member.user.name} ${member.user.surname}`.trim(),
             system_role: member.system_role,
+            member_id: member.member_id, // Добавляем member_id
         })));
     }
     return result;
@@ -119,8 +120,8 @@ const createSprint = () => {
     flex-direction: column;
     gap: 20px;
     box-sizing: border-box;
-    border-top-right-radius: 10px; /* Закругление правого верхнего угла */
-    border-bottom-right-radius: 10px; /* Закругление правого нижнего угла */
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
 }
 
 .sprint-close-button {
@@ -136,7 +137,7 @@ const createSprint = () => {
 .sprint-title {
     font-size: 20px;
     color: #1D5C57;
-    margin: 0 0 20px 40px; /* Отступ слева для выравнивания с кнопкой */
+    margin: 0 0 20px 40px;
 }
 
 .sprint-form {
@@ -164,17 +165,17 @@ const createSprint = () => {
 
 .date-pickers {
     display: flex;
-    flex-direction: column; /* Вертикальное размещение */
+    flex-direction: column;
     gap: 10px;
     width: 100%;
 }
 
 .date-pickers :deep(.p-calendar) {
-    width: 100%; /* Полная ширина */
+    width: 100%;
 }
 
 .date-pickers :deep(.p-inputtext) {
-    width: 100%; /* Полная ширина поля ввода */
+    width: 100%;
     box-sizing: border-box;
 }
 
@@ -187,11 +188,12 @@ const createSprint = () => {
     text-align: left;
     padding: 0;
     cursor: pointer;
+    width: 70px;
 }
 
 .add-task-button:hover {
-    background: transparent; /* Без фона при наведении */
-    color: #2FBFBD; /* Светлее, чем #1F9D9B */
+    background: transparent;
+    color: #2FBFBD;
 }
 
 .create-sprint-button {

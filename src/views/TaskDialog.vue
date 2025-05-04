@@ -2,8 +2,8 @@
 <template>
     <Dialog 
         v-model:visible="visible" 
-        :style="{ width: '25vw', height: '82vh' }" 
-        :modal="true"
+        :style="{ width: '24vw', height: '82vh' }" 
+        :modal="true" 
         :draggable="false" 
         :show-header="false" 
         position="right" 
@@ -47,24 +47,50 @@
                     />
                 </div>
                 <div class="form-label">Priority</div>
-                <SelectButton 
-                    v-model="taskPriority" 
-                    :options="priorityOptions" 
-                    option-label="label" 
-                    option-value="value" 
-                    class="priority-selector" 
-                    :class="{
-                        'priority-low': taskPriority === 'Low',
-                        'priority-medium': taskPriority === 'Medium',
-                        'priority-high': taskPriority === 'High'
-                    }" 
-                />
+                <div class="priority-buttons">
+                    <Button 
+                        v-for="option in priorityOptions" 
+                        :key="option.value" 
+                        :label="option.label" 
+                        :class="{ 
+                            'priority-button': true,
+                            'active': taskPriority === option.value,
+                            'priority-low': option.value === 'Low',
+                            'priority-medium': option.value === 'Medium',
+                            'priority-high': option.value === 'High'
+                        }" 
+                        @click="setPriority(option.value)" 
+                    />
+                </div>
                 <div class="form-label">Select an participant for this task</div>
-                <Button 
-                    label="Select" 
-                    class="select-participant-button" 
-                    @click="toggleParticipantPanel" 
-                />
+                <div class="participant-selection">
+                    <div class="selected-participants">
+                        <div 
+                            v-for="participant in selectedParticipants" 
+                            :key="participant.username" 
+                            class="selected-participant-item"
+                        >
+                            <Avatar 
+                                :image="participant.member_id && !avatarFailed[participant.member_id] ? `/project/member/${participant.member_id}/avatar?t=${Date.now()}` : null"
+                                :label="avatarFailed[participant.member_id] || !participant.member_id ? participant.username.slice(0, 2).toUpperCase() : null"
+                                size="medium" 
+                                shape="circle" 
+                                @error="handleAvatarError(participant.member_id, participant.name)"
+                            />
+                            <span class="selected-participant-name">{{ participant.name }}</span>
+                            <Button 
+                                icon="pi pi-times" 
+                                class="remove-participant-button" 
+                                @click="removeParticipant(participant.username)" 
+                            />
+                        </div>
+                    </div>
+                    <Button 
+                        label="Select" 
+                        class="select-participant-button" 
+                        @click="toggleParticipantPanel" 
+                    />
+                </div>
                 <Button 
                     label="Create a task" 
                     class="create-task-button" 
@@ -72,7 +98,14 @@
                 />
             </div>
             <div v-if="showParticipantPanel" class="participant-panel" :class="{ open: showParticipantPanel }">
-                <h4 class="participant-panel-title">Select participant</h4>
+                <div class="participant-panel-header">
+                    <Button 
+                        icon="pi pi-arrow-left" 
+                        class="panel-close-button" 
+                        @click="toggleParticipantPanel" 
+                    />
+                    <h4 class="participant-panel-title">Select participant</h4>
+                </div>
                 <div class="participant-search">
                     <InputText 
                         v-model="searchQuery" 
@@ -87,15 +120,17 @@
                         class="participant-item"
                     >
                         <Avatar 
-                            :label="participant.username.slice(0, 2).toUpperCase()" 
+                            :image="participant.member_id && !avatarFailed[participant.member_id] ? `/project/member/${participant.member_id}/avatar?t=${Date.now()}` : null"
+                            :label="avatarFailed[participant.member_id] || !participant.member_id ? participant.username.slice(0, 2).toUpperCase() : null"
                             size="medium" 
                             shape="circle" 
+                            @error="handleAvatarError(participant.member_id, participant.name)"
                         />
                         <span class="participant-name">{{ participant.name }}</span>
                         <Button 
                             icon="pi pi-plus" 
                             class="add-participant-button" 
-                            @click="addParticipant" 
+                            @click="addParticipant(participant)" 
                         />
                     </div>
                     <div v-if="!filteredParticipants.length" class="no-participants">
@@ -114,7 +149,6 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Calendar from 'primevue/calendar';
-import SelectButton from 'primevue/selectbutton';
 import Avatar from 'primevue/avatar';
 import { useToast } from 'primevue/usetoast';
 
@@ -135,21 +169,48 @@ const taskEndDate = ref(null);
 const taskPriority = ref('Low');
 const showParticipantPanel = ref(false);
 const searchQuery = ref('');
+const selectedParticipants = ref([]);
 
-const priorityOptions = [
-    { label: 'Low', value: 'Low' },
-    { label: 'Medium', value: 'Medium' },
-    { label: 'High', value: 'High' },
-];
+// Храним состояние ошибок аватарок по member_id
+const avatarFailed = ref({});
+
+// Список участников с состоянием аватарок
+const participantsWithAvatarStatus = computed(() => {
+    return props.participants.map(participant => ({
+        ...participant,
+        avatarFailed: avatarFailed.value[participant.member_id] || false,
+    }));
+});
+
+// Обработка ошибки загрузки аватарки
+const handleAvatarError = (member_id, name) => {
+    if (member_id) {
+        avatarFailed.value[member_id] = true;
+    }
+};
 
 const filteredParticipants = computed(() => {
-    if (!searchQuery.value) return props.participants;
+    if (!searchQuery.value) return participantsWithAvatarStatus.value;
     const query = searchQuery.value.toLowerCase();
-    return props.participants.filter(participant =>
+    return participantsWithAvatarStatus.value.filter(participant =>
         participant.name.toLowerCase().includes(query) ||
         participant.username.toLowerCase().includes(query)
     );
 });
+
+const addParticipant = (participant) => {
+    if (!selectedParticipants.value.find(p => p.username === participant.username)) {
+        selectedParticipants.value.push({ ...participant });
+        toast.add({ severity: 'success', summary: 'Participant Added', detail: `${participant.name} added to task`, life: 3000 });
+    } else {
+        toast.add({ severity: 'warn', summary: 'Duplicate', detail: `${participant.name} is already added`, life: 3000 });
+    }
+};
+
+const removeParticipant = (username) => {
+    selectedParticipants.value = selectedParticipants.value.filter(p => p.username !== username);
+    toast.add({ severity: 'info', summary: 'Participant Removed', detail: 'Participant removed from task', life: 3000 });
+};
 
 const closeForm = () => {
     visible.value = false;
@@ -161,8 +222,8 @@ const toggleParticipantPanel = () => {
     showParticipantPanel.value = !showParticipantPanel.value;
 };
 
-const addParticipant = () => {
-    toast.add({ severity: 'info', summary: 'Info', detail: 'Add participant functionality coming soon', life: 3000 });
+const setPriority = (value) => {
+    taskPriority.value = value;
 };
 
 const createTask = () => {
@@ -177,6 +238,8 @@ const resetForm = () => {
     taskPriority.value = 'Low';
     searchQuery.value = '';
     showParticipantPanel.value = false;
+    selectedParticipants.value = [];
+    avatarFailed.value = {}; // Сбрасываем ошибки аватарок
 };
 
 watch(() => props.show, (newVal) => {
@@ -192,13 +255,13 @@ watch(() => props.show, (newVal) => {
     border-bottom-left-radius: 10px;
     padding: 0;
     margin: 0;
-    z-index: 1000; /* Чтобы не перекрывать ProjectDialog.vue */
+    z-index: 1000;
 }
 
 :deep(.p-dialog) {
     padding: 0 !important;
     margin: 0 !important;
-    right: 0 !important; /* Прижать к правому краю */
+    right: 0 !important;
 }
 
 :deep(.p-dialog-content) {
@@ -217,6 +280,7 @@ watch(() => props.show, (newVal) => {
     gap: 20px;
     box-sizing: border-box;
     height: 100%;
+    overflow-y: auto;
 }
 
 .task-close-button {
@@ -274,38 +338,72 @@ watch(() => props.show, (newVal) => {
     box-sizing: border-box;
 }
 
-.priority-selector {
+.priority-buttons {
+    display: flex;
+    gap: 10px;
     width: 100%;
 }
 
-.priority-selector :deep(.p-button) {
+.priority-button {
+    flex: 1;
     font-size: 14px;
     padding: 8px;
     border: 1px solid #ccc;
-}
-
-.priority-selector.priority-low :deep(.p-button.p-highlight) {
-    background: #28a745 !important; /* Зелёный */
-    color: white !important;
-    border-color: #28a745 !important;
-}
-
-.priority-selector.priority-medium :deep(.p-button.p-highlight) {
-    background: #ffc107 !important; /* Жёлтый */
-    color: white !important;
-    border-color: #ffc107 !important;
-}
-
-.priority-selector.priority-high :deep(.p-button.p-highlight) {
-    background: #dc3545 !important; /* Красный */
-    color: white !important;
-    border-color: #dc3545 !important;
-}
-
-.priority-selector :deep(.p-button:not(.p-highlight)) {
-    background: #e0e0e0;
+    background: #ffffff;
     color: #333;
-    border-color: #ccc;
+}
+
+.priority-button.active.priority-low {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.priority-button.active.priority-medium {
+    background: #ffc107;
+    color: white;
+    border-color: #ffc107;
+}
+
+.priority-button.active.priority-high {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+.participant-selection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.selected-participants {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.selected-participant-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.selected-participant-name {
+    font-size: 14px;
+    color: #1D5C57;
+    flex: 1;
+}
+
+.remove-participant-button {
+    background: transparent;
+    border: none;
+    color: #dc3545;
+    font-size: 14px;
+}
+
+.remove-participant-button:hover {
+    color: #b02a37;
 }
 
 .select-participant-button {
@@ -317,7 +415,7 @@ watch(() => props.show, (newVal) => {
     text-align: left;
     padding: 0;
     cursor: pointer;
-    width: 70px; /* Соответствует Add task */
+    width: 70px;
 }
 
 .select-participant-button:hover {
@@ -347,23 +445,40 @@ watch(() => props.show, (newVal) => {
     right: 0;
     background: #f0f0f0;
     padding: 20px;
-    max-height: 50vh;
+    height: 50%;
     overflow-y: auto;
-    transform: translateY(0);
+    transform: translateY(100%);
     transition: transform 0.3s ease-in-out;
     z-index: 10;
     border-top: 1px solid #ccc;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
 }
 
 .participant-panel.open {
-    transform: translateY(-100%);
+    transform: translateY(0);
+}
+
+.participant-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.panel-close-button {
+    background: transparent;
+    border: none;
+    color: #1D5C57;
+    font-size: 18px;
 }
 
 .participant-panel-title {
     font-size: 16px;
     color: #1D5C57;
     text-align: center;
-    margin: 0 0 10px;
+    margin: 0;
+    flex: 1;
 }
 
 .participant-search {

@@ -4,22 +4,36 @@
         <h3 class="participants-title">Participants</h3>
         <div class="user-list">
             <!-- Создатель -->
-            <div class="user-item">
+            <div class="user-item" @click="openRoleDialog(ownerMemberId, projectData.ownerFullName || projectData.owner, ownerSystemRole, ownerDescriptiveRole)">
                 <Avatar 
-                    :label="projectData.owner?.slice(0, 2).toUpperCase()" 
+                    :image="ownerMemberId && !avatarFailed[ownerMemberId] ? `/project/member/${ownerMemberId}/avatar?t=${Date.now()}` : null"
+                    :label="avatarFailed[ownerMemberId] || !ownerMemberId ? projectData.owner?.slice(0, 2).toUpperCase() : null"
                     size="medium" 
                     shape="circle" 
+                    class="user-avatar"
+                    @error="handleAvatarError(ownerMemberId, projectData.ownerFullName || projectData.owner)"
                 />
-                <span class="user-name">{{ projectData.ownerFullName || projectData.owner }} (Owner)</span>
+                <div class="user-info">
+                    <span class="user-fullname">{{ projectData.ownerFullName || projectData.owner }}</span>
+                    <span class="user-system-role">({{ ownerSystemRole }})</span>
+                    <span class="user-descriptive-role">{{ ownerDescriptiveRole || '' }}</span>
+                </div>
             </div>
             <!-- Остальные участники -->
-            <div v-for="user in projectData.others" :key="user.member_id" class="user-item">
+            <div v-for="user in participantsWithAvatarStatus" :key="user.member_id" class="user-item" @click="openRoleDialog(user.member_id, user.user.name, user.system_role, user.descriptive_role)">
                 <Avatar 
-                    :label="user.user.username.slice(0, 2).toUpperCase()" 
+                    :image="user.member_id && !avatarFailed[user.member_id] ? `/project/member/${user.member_id}/avatar?t=${Date.now()}` : null"
+                    :label="avatarFailed[user.member_id] || !user.member_id ? user.user.username.slice(0, 2).toUpperCase() : null"
                     size="medium" 
                     shape="circle" 
+                    class="user-avatar"
+                    @error="handleAvatarError(user.member_id, user.user.name)"
                 />
-                <span class="user-name">{{ user.user.name }} {{ user.user.surname }}</span>
+                <div class="user-info">
+                    <span class="user-fullname">{{ user.user.name }} {{ user.user.surname }}</span>
+                    <span class="user-system-role">({{ user.system_role }})</span>
+                    <span class="user-descriptive-role">{{ user.descriptive_role || '' }}</span>
+                </div>
             </div>
         </div>
         <div v-if="!projectData.others?.length && !projectData.owner" class="no-users">
@@ -43,15 +57,25 @@
                 @click="showSprintForm" 
             />
         </div>
+        <SetRoleDialog 
+            :show="showRoleDialog" 
+            :member-id="selectedMemberId" 
+            :member-name="selectedMemberName" 
+            :initial-system-role="selectedSystemRole" 
+            :initial-descriptive-role="selectedDescriptiveRole" 
+            @update:show="showRoleDialog = $event" 
+            @roles-updated="updateRoles" 
+        />
     </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
-import { createInvitationCode } from '../services/api';
+import { createInvitationCode, getUserData } from '../services/api';
 import { useToast } from 'primevue/usetoast';
+import SetRoleDialog from './SetRoleDialog.vue';
 
 const toast = useToast();
 
@@ -65,6 +89,112 @@ const emit = defineEmits(['show-sprint-form']);
 const showInvitationCode = ref(false);
 const invitationCode = ref('');
 const invitationExpiresAt = ref('');
+
+// Храним состояние ошибок аватарок по member_id
+const avatarFailed = ref({});
+
+// Находим данные владельца
+const ownerMemberId = computed(() => {
+    const owner = props.projectData.others.find(user => user.system_role === 'OWNER');
+    return owner ? owner.member_id : null;
+});
+
+const ownerSystemRole = computed(() => {
+    const owner = props.projectData.others.find(user => user.system_role === 'OWNER');
+    return owner ? owner.system_role : 'OWNER';
+});
+
+const ownerDescriptiveRole = computed(() => {
+    const owner = props.projectData.others.find(user => user.system_role === 'OWNER');
+    return owner ? owner.descriptive_role ?? '' : '';
+});
+
+// Список участников с состоянием аватарок
+const participantsWithAvatarStatus = computed(() => {
+    return props.projectData.others.map(user => ({
+        ...user,
+        avatarFailed: avatarFailed.value[user.member_id] || false,
+    }));
+});
+
+// Получаем данные текущего пользователя
+const currentUser = ref(null);
+const fetchCurrentUser = async () => {
+    try {
+        const userData = await getUserData();
+        currentUser.value = userData;
+        console.log('Current user:', userData);
+    } catch (error) {
+        console.error('Failed to fetch current user:', error);
+    }
+};
+fetchCurrentUser();
+
+// Проверка прав текущего пользователя
+const hasPermission = computed(() => {
+    console.log('projectData.owner:', props.projectData.owner);
+    console.log('projectData.others:', props.projectData.others);
+    
+    // Ищем пользователя в projectData.others по username из getUserData
+    const userInProject = currentUser.value && props.projectData.others.find(
+        user => user.user.username === currentUser.value.username
+    );
+    
+    console.log('userInProject:', userInProject);
+    
+    // Если пользователь найден и его роль ADMIN или OWNER, разрешаем доступ
+    if (userInProject && ['ADMIN', 'OWNER'].includes(userInProject.system_role)) {
+        return true;
+    }
+    
+    // Запасной вариант: если текущий username совпадает с projectData.owner
+    if (currentUser.value && currentUser.value.username === props.projectData.owner) {
+        return true;
+    }
+    
+    return false;
+});
+
+// Управление диалоговым окном ролей
+const showRoleDialog = ref(false);
+const selectedMemberId = ref(0);
+const selectedMemberName = ref('');
+const selectedSystemRole = ref('MEMBER');
+const selectedDescriptiveRole = ref('');
+
+const openRoleDialog = (memberId, memberName, systemRole, descriptiveRole) => {
+    console.log('Opening role dialog for member:', memberId, 'System role:', systemRole, 'Descriptive role:', descriptiveRole);
+    console.log('projectData.others:', props.projectData.others);
+    if (!hasPermission.value) {
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'You do not have permission to update roles',
+            life: 3000,
+        });
+        return;
+    }
+    selectedMemberId.value = memberId;
+    selectedMemberName.value = memberName;
+    selectedSystemRole.value = systemRole || 'MEMBER';
+    selectedDescriptiveRole.value = descriptiveRole ?? '';
+    showRoleDialog.value = true;
+};
+
+const updateRoles = ({ memberId, systemRole, descriptiveRole }) => {
+    const user = props.projectData.others.find(u => u.member_id === memberId);
+    if (user) {
+        user.system_role = systemRole;
+        user.descriptive_role = descriptiveRole;
+    }
+};
+
+// Обработка ошибки загрузки аватарки
+const handleAvatarError = (member_id, name) => {
+    if (member_id) {
+        avatarFailed.value[member_id] = true;
+    }
+};
 
 const fetchInvitationCode = async () => {
     try {
@@ -108,8 +238,8 @@ const showSprintForm = () => {
     flex-direction: column;
     gap: 20px;
     box-sizing: border-box;
-    border-top-right-radius: 10px; /* Закругление правого верхнего угла */
-    border-bottom-right-radius: 10px; /* Закругление правого нижнего угла */
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
 }
 
 .participants-title {
@@ -135,13 +265,47 @@ const showSprintForm = () => {
 
 .user-item {
     display: flex;
-    align-items: center;
+    flex-direction: row;
+    align-items: flex-start;
     gap: 10px;
+    cursor: pointer;
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
 }
 
-.user-name {
+.user-item:hover {
+    background: #e0e0e0;
+    border-radius: 8px;
+}
+
+.user-avatar {
+    flex-shrink: 0;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: calc(100% - 60px); /* Учитываем ширину аватарки и gap */
+}
+
+.user-fullname {
     font-size: 14px;
     color: #1D5C57;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.user-system-role {
+    font-size: 12px;
+    color: #1D5C57;
+}
+
+.user-descriptive-role {
+    font-size: 12px;
+    color: #1D5C57;
+    word-break: break-word;
 }
 
 .add-participant-container {
