@@ -2,7 +2,7 @@
 <template>
     <Dialog 
         v-model:visible="visible" 
-        :style="{ width: '24vw', height: '82vh' }" 
+        :style="{ width: '28vw', height: '85vh' }" 
         :modal="true" 
         :draggable="false" 
         :show-header="false" 
@@ -15,7 +15,7 @@
                 class="task-close-button" 
                 @click="closeForm" 
             />
-            <h3 class="task-title">New task</h3>
+            <h3 class="task-title">{{ mode === 'edit' ? 'Edit task' : 'New task' }}</h3>
             <div class="task-form">
                 <div class="form-label">Name</div>
                 <InputText 
@@ -62,26 +62,34 @@
                         @click="setPriority(option.value)" 
                     />
                 </div>
-                <div class="form-label">Select an participant for this task</div>
+                <div class="form-label">Select a participant for this task</div>
                 <div class="participant-selection">
                     <div class="selected-participants">
                         <div 
                             v-for="participant in selectedParticipants" 
-                            :key="participant.username" 
+                            :key="participant.username + '-' + participant.member_id" 
                             class="selected-participant-item"
                         >
                             <Avatar 
-                                :image="participant.member_id && !avatarFailed[participant.member_id] ? `/project/member/${participant.member_id}/avatar?t=${Date.now()}` : null"
-                                :label="avatarFailed[participant.member_id] || !participant.member_id ? participant.username.slice(0, 2).toUpperCase() : null"
+                                v-if="isLoadingAvatars"
+                                :label="participant.username.slice(0, 2).toUpperCase()"
                                 size="medium" 
                                 shape="circle" 
-                                @error="handleAvatarError(participant.member_id, participant.name)"
+                                class="loading-avatar"
+                            />
+                            <Avatar 
+                                v-else
+                                :image="avatarUrls[String(participant.member_id)] || null"
+                                :label="!avatarUrls[String(participant.member_id)] ? participant.username.slice(0, 2).toUpperCase() : null"
+                                size="medium" 
+                                shape="circle" 
+                                :key="avatarUrls[String(participant.member_id)] || participant.username"
                             />
                             <span class="selected-participant-name">{{ participant.name }}</span>
                             <Button 
                                 icon="pi pi-times" 
                                 class="remove-participant-button" 
-                                @click="removeParticipant(participant.username)" 
+                                @click="removeParticipant(participant)" 
                             />
                         </div>
                     </div>
@@ -92,7 +100,7 @@
                     />
                 </div>
                 <Button 
-                    label="Create a task" 
+                    :label="mode === 'edit' ? 'Update Task' : 'Create a task'" 
                     class="create-task-button" 
                     @click="createTask" 
                 />
@@ -116,15 +124,23 @@
                 <div class="participant-list">
                     <div 
                         v-for="participant in filteredParticipants" 
-                        :key="participant.username" 
+                        :key="participant.username + '-' + participant.member_id" 
                         class="participant-item"
                     >
                         <Avatar 
-                            :image="participant.member_id && !avatarFailed[participant.member_id] ? `/project/member/${participant.member_id}/avatar?t=${Date.now()}` : null"
-                            :label="avatarFailed[participant.member_id] || !participant.member_id ? participant.username.slice(0, 2).toUpperCase() : null"
+                            v-if="isLoadingAvatars"
+                            :label="participant.username.slice(0, 2).toUpperCase()"
                             size="medium" 
                             shape="circle" 
-                            @error="handleAvatarError(participant.member_id, participant.name)"
+                            class="loading-avatar"
+                        />
+                        <Avatar 
+                            v-else
+                            :image="avatarUrls[String(participant.member_id)] || null"
+                            :label="!avatarUrls[String(participant.member_id)] ? participant.username.slice(0, 2).toUpperCase() : null"
+                            size="medium" 
+                            shape="circle" 
+                            :key="avatarUrls[String(participant.member_id)] || participant.username"
                         />
                         <span class="participant-name">{{ participant.name }}</span>
                         <Button 
@@ -151,15 +167,18 @@ import Textarea from 'primevue/textarea';
 import Calendar from 'primevue/calendar';
 import Avatar from 'primevue/avatar';
 import { useToast } from 'primevue/usetoast';
+import { getMemberAvatar } from '../services/api';
 
 const toast = useToast();
 
 const props = defineProps({
     show: { type: Boolean, default: false },
     participants: { type: Array, default: () => [] },
+    task: { type: Object, default: null },
+    mode: { type: String, default: 'create' }, // 'create' или 'edit'
 });
 
-const emit = defineEmits(['update:show']);
+const emit = defineEmits(['update:show', 'add-task', 'update-task']);
 
 const visible = ref(props.show);
 const taskName = ref('');
@@ -170,25 +189,128 @@ const taskPriority = ref('Low');
 const showParticipantPanel = ref(false);
 const searchQuery = ref('');
 const selectedParticipants = ref([]);
+const originalTaskName = ref(null);
 
-// Храним состояние ошибок аватарок по member_id
+// Опции приоритета
+const priorityOptions = ref([
+    { label: 'Low', value: 'Low' },
+    { label: 'Medium', value: 'Medium' },
+    { label: 'High', value: 'High' }
+]);
+
+// Храним URL аватаров и состояние загрузки
+const avatarUrls = ref({});
 const avatarFailed = ref({});
+const isLoadingAvatars = ref(false);
 
-// Список участников с состоянием аватарок
-const participantsWithAvatarStatus = computed(() => {
-    return props.participants.map(participant => ({
-        ...participant,
-        avatarFailed: avatarFailed.value[participant.member_id] || false,
-    }));
-});
-
-// Обработка ошибки загрузки аватарки
-const handleAvatarError = (member_id, name) => {
-    if (member_id) {
-        avatarFailed.value[member_id] = true;
-    }
+// Функция сброса формы
+const resetForm = () => {
+    taskName.value = '';
+    taskDescription.value = '';
+    taskStartDate.value = null;
+    taskEndDate.value = null;
+    taskPriority.value = 'Low';
+    searchQuery.value = '';
+    showParticipantPanel.value = false;
+    selectedParticipants.value = [];
+    avatarFailed.value = {};
+    originalTaskName.value = null;
 };
 
+// Загрузка аватарок
+const loadAvatars = async () => {
+    isLoadingAvatars.value = true;
+    // Очищаем только неиспользуемые blob URL
+    const currentMemberIds = new Set(props.participants.map(p => String(p.member_id)).filter(id => id));
+    Object.keys(avatarUrls.value).forEach(member_id => {
+        if (!currentMemberIds.has(member_id)) {
+            URL.revokeObjectURL(avatarUrls.value[member_id]);
+            delete avatarUrls.value[member_id];
+        }
+    });
+
+    const avatarPromises = props.participants.map(async (user, index) => {
+        const memberId = String(user.member_id || 'unknown');
+        try {
+            const avatarUrl = await getMemberAvatar(memberId);
+            return { index, member_id: memberId, avatarUrl, error: null };
+        } catch (error) {
+            console.warn(`TaskDialog - Failed to fetch avatar for member ${memberId}:`, error);
+            return { index, member_id: memberId, avatarUrl: null, error };
+        }
+    });
+
+    const results = await Promise.all(avatarPromises);
+    results.forEach(({ member_id, avatarUrl, error }) => {
+        if (avatarUrl) {
+            avatarUrls.value[member_id] = avatarUrl;
+        } else {
+            avatarFailed.value[member_id] = true;
+        }
+    });
+
+    isLoadingAvatars.value = false;
+};
+
+// Загружаем аватары при изменении participants
+watch(() => props.participants, () => {
+    loadAvatars();
+}, { immediate: true, deep: true });
+
+// Инициализация формы при получении задачи
+watch(() => props.task, (newTask) => {
+    if (newTask && props.mode === 'edit') {
+        taskName.value = newTask.name;
+        taskDescription.value = newTask.description;
+        taskPriority.value = newTask.priority.charAt(0).toUpperCase() + newTask.priority.slice(1).toLowerCase();
+        taskStartDate.value = newTask.start_at ? new Date(newTask.start_at) : null;
+        taskEndDate.value = newTask.end_at ? new Date(newTask.end_at) : null;
+        originalTaskName.value = newTask.name;
+        selectedParticipants.value = props.participants.filter(p => 
+            newTask.implementer_member_ids.includes(Number(p.member_id))
+        );
+    } else {
+        resetForm();
+    }
+}, { immediate: true });
+
+// Список участников с состоянием аватарок, исключая дубликаты
+const participantsWithAvatarStatus = computed(() => {
+    const uniqueParticipants = [];
+    const seenUsernames = new Set();
+    const usernameToParticipant = new Map();
+
+    for (const participant of props.participants) {
+        const username = participant.username;
+        const current = usernameToParticipant.get(username);
+
+        if (!current) {
+            usernameToParticipant.set(username, participant);
+        } else {
+            if (
+                (participant.member_id != null && current.member_id == null) ||
+                (participant.system_role === 'OWNER' && current.system_role !== 'OWNER')
+            ) {
+                usernameToParticipant.set(username, participant);
+            }
+        }
+    }
+
+    for (const participant of usernameToParticipant.values()) {
+        if (!seenUsernames.has(participant.username)) {
+            seenUsernames.add(participant.username);
+            uniqueParticipants.push({
+                ...participant,
+                member_id: participant.member_id ? String(participant.member_id) : null,
+                avatarFailed: participant.member_id ? avatarFailed.value[String(participant.member_id)] || false : true,
+            });
+        }
+    }
+
+    return uniqueParticipants;
+});
+
+// Фильтрация участников
 const filteredParticipants = computed(() => {
     if (!searchQuery.value) return participantsWithAvatarStatus.value;
     const query = searchQuery.value.toLowerCase();
@@ -200,16 +322,16 @@ const filteredParticipants = computed(() => {
 
 const addParticipant = (participant) => {
     if (!selectedParticipants.value.find(p => p.username === participant.username)) {
-        selectedParticipants.value.push({ ...participant });
+        selectedParticipants.value.push({ ...participant, username: String(participant.username) });
         toast.add({ severity: 'success', summary: 'Participant Added', detail: `${participant.name} added to task`, life: 3000 });
     } else {
         toast.add({ severity: 'warn', summary: 'Duplicate', detail: `${participant.name} is already added`, life: 3000 });
     }
 };
 
-const removeParticipant = (username) => {
-    selectedParticipants.value = selectedParticipants.value.filter(p => p.username !== username);
-    toast.add({ severity: 'info', summary: 'Participant Removed', detail: 'Participant removed from task', life: 3000 });
+const removeParticipant = (participant) => {
+    selectedParticipants.value = selectedParticipants.value.filter(p => p.username !== participant.username);
+    toast.add({ severity: 'info', summary: 'Participant Removed', detail: `${participant.name} removed from task`, life: 3000 });
 };
 
 const closeForm = () => {
@@ -227,25 +349,36 @@ const setPriority = (value) => {
 };
 
 const createTask = () => {
-    toast.add({ severity: 'info', summary: 'Info', detail: 'Create task functionality coming soon', life: 3000 });
-};
+    if (!taskName.value) {
+        toast.add({ severity: 'warn', summary: 'Validation Error', detail: 'Task name is required', life: 3000 });
+        return;
+    }
 
-const resetForm = () => {
-    taskName.value = '';
-    taskDescription.value = '';
-    taskStartDate.value = null;
-    taskEndDate.value = null;
-    taskPriority.value = 'Low';
-    searchQuery.value = '';
-    showParticipantPanel.value = false;
-    selectedParticipants.value = [];
-    avatarFailed.value = {}; // Сбрасываем ошибки аватарок
-};
+    const task = {
+        name: taskName.value,
+        description: taskDescription.value || '',
+        priority: taskPriority.value.toUpperCase(),
+        start_at: taskStartDate.value ? new Date(taskStartDate.value).toISOString() : null,
+        end_at: taskEndDate.value ? new Date(taskEndDate.value).toISOString() : null,
+        implementer_member_ids: selectedParticipants.value
+            .filter(p => p.member_id != null)
+            .map(p => Number(p.member_id)),
+    };
 
-watch(() => props.show, (newVal) => {
-    visible.value = newVal;
-    if (!newVal) resetForm();
-});
+    if (props.mode === 'edit') {
+        emit('update-task', { originalName: originalTaskName.value, updatedTask: task });
+    } else {
+        emit('add-task', task);
+    }
+
+    toast.add({ 
+        severity: 'success', 
+        summary: props.mode === 'edit' ? 'Task Updated' : 'Task Added', 
+        detail: props.mode === 'edit' ? 'Task updated' : 'Task added to sprint', 
+        life: 3000 
+    });
+    closeForm();
+};
 </script>
 
 <style scoped>
@@ -342,6 +475,7 @@ watch(() => props.show, (newVal) => {
     display: flex;
     gap: 10px;
     width: 100%;
+    min-height: 40px;
 }
 
 .priority-button {
@@ -449,7 +583,7 @@ watch(() => props.show, (newVal) => {
     overflow-y: auto;
     transform: translateY(100%);
     transition: transform 0.3s ease-in-out;
-    z-index: 10;
+    z-index: 1000;
     border-top: 1px solid #ccc;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
@@ -528,5 +662,16 @@ watch(() => props.show, (newVal) => {
     font-size: 14px;
     color: #666;
     text-align: center;
+}
+
+.loading-avatar {
+    opacity: 0.5;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.5; }
 }
 </style>

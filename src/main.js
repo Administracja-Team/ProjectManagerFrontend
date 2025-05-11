@@ -9,6 +9,8 @@ import i18n from "./i18n";
 import router from './router'; // Добавляем маршрутизацию
 import ToastService from 'primevue/toastservice'; // Импортируем ToastService
 import Toast from 'primevue/toast';
+import ConfirmationService from 'primevue/confirmationservice'; 
+import Vue3TouchEvents from 'vue3-touch-events';
 import 'primeicons/primeicons.css';
 
 const MyPreset = definePreset(Aura, {
@@ -56,5 +58,9 @@ app.use(PrimeVue, {
 });
 app.use(router);
 app.use(ToastService);
+app.use(ConfirmationService);
+app.use(Vue3TouchEvents, {
+    swipeTolerance: 30 // Устанавливаем порог свайпа
+});
 app.component('Toast', Toast);
 app.mount("#app");

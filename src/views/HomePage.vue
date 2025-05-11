@@ -91,6 +91,11 @@ const joinProject = async () => {
     }
 };
 
+const handleProjectDeleted = (projectId) => {
+    projects.value = projects.value.filter(project => project.projectId !== projectId);
+    console.log('Project deleted, updated projects:', projects.value);
+};
+
 onMounted(() => {
     fetchUserData();
     fetchProjects();
@@ -235,6 +240,7 @@ const handleCreateProject = (projectData) => {
             :show="projectDialogVisible" 
             :project-id="selectedProjectId" 
             @update:show="projectDialogVisible = $event" 
+            @project-deleted="handleProjectDeleted" 
         />
 
         <Toast />

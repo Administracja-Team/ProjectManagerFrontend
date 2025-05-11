@@ -4,36 +4,52 @@
         <h3 class="participants-title">Participants</h3>
         <div class="user-list">
             <!-- Создатель -->
-            <div class="user-item" @click="openRoleDialog(ownerMemberId, projectData.ownerFullName || projectData.owner, ownerSystemRole, ownerDescriptiveRole)">
-                <Avatar 
-                    :image="ownerMemberId && !avatarFailed[ownerMemberId] ? `/project/member/${ownerMemberId}/avatar?t=${Date.now()}` : null"
-                    :label="avatarFailed[ownerMemberId] || !ownerMemberId ? projectData.owner?.slice(0, 2).toUpperCase() : null"
-                    size="medium" 
-                    shape="circle" 
-                    class="user-avatar"
-                    @error="handleAvatarError(ownerMemberId, projectData.ownerFullName || projectData.owner)"
-                />
-                <div class="user-info">
-                    <span class="user-fullname">{{ projectData.ownerFullName || projectData.owner }}</span>
-                    <span class="user-system-role">({{ ownerSystemRole }})</span>
-                    <span class="user-descriptive-role">{{ ownerDescriptiveRole || '' }}</span>
+            <div class="user-item">
+                <div class="user-content" @click="openRoleDialog(ownerMemberId, projectData.ownerFullName || projectData.owner, ownerSystemRole, ownerDescriptiveRole)">
+                    <Skeleton v-if="isLoadingAvatars" class="user-avatar-skeleton" shape="circle" size="2.5rem" />
+                    <Avatar v-else
+                        :image="avatarUrls[ownerMemberId] || null"
+                        :label="!avatarUrls[ownerMemberId] ? projectData.owner?.slice(0, 2).toUpperCase() : null"
+                        size="medium" 
+                        shape="circle" 
+                        class="user-avatar"
+                    />
+                    <div class="user-info">
+                        <span class="user-fullname">{{ projectData.ownerFullName || projectData.owner || 'Unknown' }}</span>
+                        <span class="user-system-role">({{ ownerSystemRole }})</span>
+                        <span class="user-descriptive-role">{{ ownerDescriptiveRole || '' }}</span>
+                    </div>
                 </div>
+                <Button 
+                    v-if="hasPermission && ownerMemberId" 
+                    icon="pi pi-trash" 
+                    class="delete-button" 
+                    @click="confirmDelete(ownerMemberId, projectData.ownerFullName || projectData.owner)" 
+                />
             </div>
             <!-- Остальные участники -->
-            <div v-for="user in participantsWithAvatarStatus" :key="user.member_id" class="user-item" @click="openRoleDialog(user.member_id, user.user.name, user.system_role, user.descriptive_role)">
-                <Avatar 
-                    :image="user.member_id && !avatarFailed[user.member_id] ? `/project/member/${user.member_id}/avatar?t=${Date.now()}` : null"
-                    :label="avatarFailed[user.member_id] || !user.member_id ? user.user.username.slice(0, 2).toUpperCase() : null"
-                    size="medium" 
-                    shape="circle" 
-                    class="user-avatar"
-                    @error="handleAvatarError(user.member_id, user.user.name)"
-                />
-                <div class="user-info">
-                    <span class="user-fullname">{{ user.user.name }} {{ user.user.surname }}</span>
-                    <span class="user-system-role">({{ user.system_role }})</span>
-                    <span class="user-descriptive-role">{{ user.descriptive_role || '' }}</span>
+            <div v-for="user in participantsWithAvatarStatus" :key="user.member_id" class="user-item">
+                <div class="user-content" @click="openRoleDialog(user.member_id, user.user.name, user.system_role, user.descriptive_role)">
+                    <Skeleton v-if="isLoadingAvatars" class="user-avatar-skeleton" shape="circle" size="2.5rem" />
+                    <Avatar v-else
+                        :image="avatarUrls[user.member_id] || null"
+                        :label="!avatarUrls[user.member_id] ? user.user.username.slice(0, 2).toUpperCase() : null"
+                        size="medium" 
+                        shape="circle" 
+                        class="user-avatar"
+                    />
+                    <div class="user-info">
+                        <span class="user-fullname">{{ user.user.name }} {{ user.user.surname }}</span>
+                        <span class="user-system-role">({{ user.system_role }})</span>
+                        <span class="user-descriptive-role">{{ user.descriptive_role || '' }}</span>
+                    </div>
                 </div>
+                <Button 
+                    v-if="hasPermission" 
+                    icon="pi pi-trash" 
+                    class="delete-button" 
+                    @click="confirmDelete(user.member_id, user.user.name)" 
+                />
             </div>
         </div>
         <div v-if="!projectData.others?.length && !projectData.owner" class="no-users">
@@ -66,18 +82,23 @@
             @update:show="showRoleDialog = $event" 
             @roles-updated="updateRoles" 
         />
+        <ConfirmDialog />
     </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
-import { createInvitationCode, getUserData } from '../services/api';
+import Skeleton from 'primevue/skeleton';
+import ConfirmDialog from 'primevue/confirmdialog';
+import { useConfirm } from 'primevue/useconfirm';
+import { createInvitationCode, getUserData, deleteMember, getMemberAvatar } from '../services/api';
 import { useToast } from 'primevue/usetoast';
 import SetRoleDialog from './SetRoleDialog.vue';
 
 const toast = useToast();
+const confirm = useConfirm();
 
 const props = defineProps({
     projectData: { type: Object, required: true },
@@ -90,28 +111,109 @@ const showInvitationCode = ref(false);
 const invitationCode = ref('');
 const invitationExpiresAt = ref('');
 
+// Храним URL аватаров по member_id
+const avatarUrls = ref({});
 // Храним состояние ошибок аватарок по member_id
 const avatarFailed = ref({});
+// Храним общее состояние загрузки всех аватарок
+const isLoadingAvatars = ref(false);
 
-// Находим данные владельца
+// Находим владельца
+const ownerMember = computed(() => {
+    return props.projectData.others.find(member => member.system_role === 'OWNER') || null;
+});
+
 const ownerMemberId = computed(() => {
-    const owner = props.projectData.others.find(user => user.system_role === 'OWNER');
-    return owner ? owner.member_id : null;
+    return ownerMember.value?.member_id || null;
 });
 
 const ownerSystemRole = computed(() => {
-    const owner = props.projectData.others.find(user => user.system_role === 'OWNER');
-    return owner ? owner.system_role : 'OWNER';
+    return ownerMember.value?.system_role || 'OWNER';
 });
 
 const ownerDescriptiveRole = computed(() => {
-    const owner = props.projectData.others.find(user => user.system_role === 'OWNER');
-    return owner ? owner.descriptive_role ?? '' : '';
+    return ownerMember.value?.descriptive_role || '';
 });
+
+// Загрузка аватаров
+const loadAvatars = async () => {
+    isLoadingAvatars.value = true;
+    // Очищаем старые аватары
+    Object.values(avatarUrls.value).forEach(url => URL.revokeObjectURL(url));
+    avatarUrls.value = {};
+    avatarFailed.value = {};
+
+    // Собираем всех участников, включая владельца
+    const participants = props.projectData.others || [];
+
+    // Создаём массив задач для параллельной загрузки аватаров
+    const avatarPromises = participants
+        .filter(user => user.member_id) // Пропускаем участников без member_id
+        .map(async (user) => {
+            // Проверяем, что member_id безопасен
+            if (user.member_id > Number.MAX_SAFE_INTEGER) {
+                console.warn(`UsersInfo - member_id ${user.member_id} exceeds Number.MAX_SAFE_INTEGER`);
+                return { member_id: user.member_id, avatarUrl: null, error: new Error('Invalid member_id') };
+            }
+            try {
+                const avatarUrl = await getMemberAvatar(user.member_id);
+                return { member_id: user.member_id, avatarUrl, error: null };
+            } catch (error) {
+                console.error(`UsersInfo - Error fetching avatar for member ${user.member_id}:`, {
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    message: error.message
+                });
+                return { member_id: user.member_id, avatarUrl: null, error };
+            }
+        });
+
+    // Ждём завершения всех запросов
+    const results = await Promise.all(avatarPromises);
+
+    // Обрабатываем результаты
+    results.forEach(({ member_id, avatarUrl, error }) => {
+        if (avatarUrl) {
+            avatarUrls.value[member_id] = avatarUrl;
+        } else {
+            avatarFailed.value[member_id] = true;
+            console.warn(`UsersInfo - Failed to fetch avatar for member ${member_id}:`, error);
+        }
+    });
+
+    // Проверяем владельца
+    if (ownerMemberId.value && avatarFailed.value[ownerMemberId.value]) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Failed to load owner avatar',
+            life: 3000
+        });
+    } else if (!ownerMemberId.value) {
+        console.warn('UsersInfo - Owner not found in projectData.others');
+        // Тост показываем только один раз
+        if (!avatarUrls.value.hasWarnedOwnerNotFound) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Warning',
+                detail: 'Owner not found in project participants',
+                life: 3000
+            });
+            avatarUrls.value.hasWarnedOwnerNotFound = true;
+        }
+    }
+
+    isLoadingAvatars.value = false;
+};
+
+// Загружаем аватары при изменении projectData.others
+watch(() => props.projectData.others, () => {
+    loadAvatars();
+}, { immediate: true, deep: true });
 
 // Список участников с состоянием аватарок
 const participantsWithAvatarStatus = computed(() => {
-    return props.projectData.others.map(user => ({
+    return props.projectData.others.filter(user => user.system_role !== 'OWNER').map(user => ({
         ...user,
         avatarFailed: avatarFailed.value[user.member_id] || false,
     }));
@@ -123,7 +225,6 @@ const fetchCurrentUser = async () => {
     try {
         const userData = await getUserData();
         currentUser.value = userData;
-        console.log('Current user:', userData);
     } catch (error) {
         console.error('Failed to fetch current user:', error);
     }
@@ -132,27 +233,12 @@ fetchCurrentUser();
 
 // Проверка прав текущего пользователя
 const hasPermission = computed(() => {
-    console.log('projectData.owner:', props.projectData.owner);
-    console.log('projectData.others:', props.projectData.others);
-    
-    // Ищем пользователя в projectData.others по username из getUserData
     const userInProject = currentUser.value && props.projectData.others.find(
         user => user.user.username === currentUser.value.username
     );
     
-    console.log('userInProject:', userInProject);
-    
-    // Если пользователь найден и его роль ADMIN или OWNER, разрешаем доступ
-    if (userInProject && ['ADMIN', 'OWNER'].includes(userInProject.system_role)) {
-        return true;
-    }
-    
-    // Запасной вариант: если текущий username совпадает с projectData.owner
-    if (currentUser.value && currentUser.value.username === props.projectData.owner) {
-        return true;
-    }
-    
-    return false;
+    return userInProject && ['ADMIN', 'OWNER'].includes(userInProject.system_role) || 
+           (currentUser.value && currentUser.value.username === props.projectData.owner);
 });
 
 // Управление диалоговым окном ролей
@@ -163,8 +249,6 @@ const selectedSystemRole = ref('MEMBER');
 const selectedDescriptiveRole = ref('');
 
 const openRoleDialog = (memberId, memberName, systemRole, descriptiveRole) => {
-    console.log('Opening role dialog for member:', memberId, 'System role:', systemRole, 'Descriptive role:', descriptiveRole);
-    console.log('projectData.others:', props.projectData.others);
     if (!hasPermission.value) {
         toast.add({
             severity: 'error',
@@ -189,11 +273,61 @@ const updateRoles = ({ memberId, systemRole, descriptiveRole }) => {
     }
 };
 
-// Обработка ошибки загрузки аватарки
-const handleAvatarError = (member_id, name) => {
-    if (member_id) {
-        avatarFailed.value[member_id] = true;
-    }
+// Подтверждение удаления
+const confirmDelete = (memberId, memberName) => {
+    confirm.require({
+        message: `Are you sure you want to remove the user ${memberName} from the project?`,
+        header: 'Confirm Removal',
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: 'Yes',
+        rejectLabel: 'No',
+        accept: async () => {
+            try {
+                await deleteMember(memberId);
+                props.projectData.others = props.projectData.others.filter(u => u.member_id !== memberId);
+                toast.add({
+                    severity: 'success',
+                    summary: 'Success',
+                    detail: 'Member removed successfully',
+                    life: 3000,
+                });
+            } catch (error) {
+                const status = error.response?.status;
+                if (status === 403) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'You do not have permission to remove members',
+                        life: 3000,
+                    });
+                } else if (status === 404) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'Member not found',
+                        life: 3000,
+                    });
+                } else if (status === 400) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'You cannot remove yourself',
+                        life: 3000,
+                    });
+                } else {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Error',
+                        detail: 'Failed to remove member',
+                        life: 3000,
+                    });
+                }
+            }
+        },
+        reject: () => {
+            // Ничего не делаем при отмене
+        }
+    });
 };
 
 const fetchInvitationCode = async () => {
@@ -265,10 +399,8 @@ const showSprintForm = () => {
 
 .user-item {
     display: flex;
-    flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
-    cursor: pointer;
     width: 100%;
     padding: 8px;
     box-sizing: border-box;
@@ -279,15 +411,26 @@ const showSprintForm = () => {
     border-radius: 8px;
 }
 
-.user-avatar {
+.user-content {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    flex: 1;
+    cursor: pointer;
+}
+
+.user-avatar, .user-avatar-skeleton {
     flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
 }
 
 .user-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    max-width: calc(100% - 60px); /* Учитываем ширину аватарки и gap */
+    max-width: calc(100% - 60px);
 }
 
 .user-fullname {
@@ -304,8 +447,21 @@ const showSprintForm = () => {
 
 .user-descriptive-role {
     font-size: 12px;
-    color: #1D5C57;
+    color: #666;
     word-break: break-word;
+}
+
+.delete-button {
+    background: transparent;
+    border: none;
+    color: #ff4d4f;
+    font-size: 16px;
+    padding: 4px;
+    cursor: pointer;
+}
+
+.delete-button:hover {
+    color: #cc0000;
 }
 
 .add-participant-container {
