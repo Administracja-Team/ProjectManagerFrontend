@@ -1,6 +1,6 @@
 <!-- src/components/Dashboard.vue -->
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import Avatar from 'primevue/avatar';
 import Button from 'primevue/button';
 import { useRouter } from 'vue-router';
@@ -10,6 +10,7 @@ import ProgressCircle from './ProgressCircle.vue';
 import ProfileDialog from './ProfileDialog.vue';
 import CreateProjectDialog from './CreateProjectDialog.vue';
 import ProjectDialog from './ProjectDialog.vue';
+import ProjectInfo from './ProjectInfo.vue';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 
@@ -28,16 +29,21 @@ const userData = ref({
 const dialogVisible = ref(false);
 const createDialogVisible = ref(false);
 const projectDialogVisible = ref(false);
+const rickrollDialogVisible = ref(false);
 const selectedProjectId = ref(null);
-const invitationCode = ref(''); // Для хранения введённого кода
-
+const invitationCode = ref('');
 const projects = ref([]);
 const gridContainer = ref(null);
+const isFetching = ref(false);
+
+// Логика для рикролл-шутки
+const clickSequence = ref([]);
+const correctSequence = ['moon', 'globe', 'moon', 'sign-out'];
 
 const fetchUserData = async () => {
     try {
         const data = await getUserData();
-        console.log('Fetched user data:', data);
+        console.log('Dashboard - Fetched user data:', JSON.stringify(data, null, 2));
         userData.value = {
             name: data.name || '',
             surname: data.surname || '',
@@ -47,25 +53,38 @@ const fetchUserData = async () => {
             about: data.description || '',
         };
     } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error('Dashboard - Error fetching user data:', error);
     }
 };
 
 const fetchProjects = async () => {
+    if (isFetching.value) {
+        console.log('Dashboard - fetchProjects already in progress, skipping');
+        return;
+    }
+    isFetching.value = true;
     try {
         const projectData = await getAllUserProjects();
-        console.log('Fetched projects:', projectData);
-        projects.value = projectData.map(project => ({
+        console.log('Dashboard - Fetched projects:', JSON.stringify(projectData, null, 2));
+        const newProjects = projectData.map(project => ({
             projectId: project.project.id,
             name: project.project.name,
             owner: project.owner_name || 'Unknown',
             sprint: 'Sprint TBD',
             deadline: 'TBD',
-            progress: 0
+            progress: project.project.done_percents
         }));
+        if (JSON.stringify(newProjects) !== JSON.stringify(projects.value)) {
+            console.log('Dashboard - Updating projects:', JSON.stringify(newProjects, null, 2));
+            projects.value = newProjects;
+        } else {
+            console.log('Dashboard - Projects unchanged, skipping update');
+        }
     } catch (error) {
-        console.error('Error in fetchProjects:', error);
+        console.error('Dashboard - Error in fetchProjects:', error);
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load projects', life: 3000 });
+    } finally {
+        isFetching.value = false;
     }
 };
 
@@ -77,8 +96,8 @@ const joinProject = async () => {
     try {
         await connectToProject(invitationCode.value);
         toast.add({ severity: 'success', summary: 'Success', detail: 'Successfully connected to project', life: 3000 });
-        invitationCode.value = ''; // Очищаем поле
-        await fetchProjects(); // Обновляем список проектов
+        invitationCode.value = '';
+        await fetchProjects();
     } catch (error) {
         const status = error.response?.status;
         if (status === 404) {
@@ -93,21 +112,23 @@ const joinProject = async () => {
 
 const handleProjectDeleted = (projectId) => {
     projects.value = projects.value.filter(project => project.projectId !== projectId);
-    console.log('Project deleted, updated projects:', projects.value);
+    console.log('Dashboard - Project deleted, updated projects:', JSON.stringify(projects.value, null, 2));
 };
 
 onMounted(() => {
+    console.log('Dashboard - Mounted');
     fetchUserData();
     fetchProjects();
 });
 
 const projectSlides = computed(() => {
-    const slides = [];
-    for (let i = 0; i < projects.value.length; i += 10) {
-        slides.push(projects.value.slice(i, i + 10));
-    }
-    return slides;
+    console.log('Dashboard - Computing projectSlides, projects length:', projects.value.length);
+    return projects.value.length ? [projects.value.slice(0, 10)] : [];
 });
+
+watch(projects, (newVal) => {
+    console.log('Dashboard - Projects changed:', JSON.stringify(newVal, null, 2));
+}, { deep: true });
 
 const scrollLeft = () => {
     if (gridContainer.value) {
@@ -138,12 +159,38 @@ const handleSave = (data) => {
     userData.value.username = data.username || userData.value.username;
     userData.value.email = data.email || userData.value.email;
     userData.value.avatar = data.avatar || userData.value.avatar;
-    console.log('Profile updated:', userData.value);
+    console.log('Dashboard - Profile updated:', JSON.stringify(userData.value, null, 2));
+};
+
+const handleIconClick = (icon) => {
+    clickSequence.value = [...clickSequence.value, icon];
+    console.log('Dashboard - Click sequence:', clickSequence.value);
+
+    const isSequenceCorrect = clickSequence.value.every((click, index) => click === correctSequence[index]);
+
+    if (!isSequenceCorrect) {
+        clickSequence.value = [];
+        console.log('Dashboard - Incorrect sequence, resetting');
+        return;
+    }
+
+    if (clickSequence.value.length === correctSequence.length) {
+        console.log('Dashboard - Correct sequence! Showing ProjectInfo dialog');
+        rickrollDialogVisible.value = true;
+        clickSequence.value = [];
+    }
 };
 
 const login_out = () => {
-    localStorage.clear();
-    router.push('/');
+    console.log('Dashboard - Attempting login_out, clickSequence:', clickSequence.value);
+    if (clickSequence.value.length === correctSequence.length - 1 && 
+        clickSequence.value.every((click, index) => click === correctSequence[index])) {
+        handleIconClick('sign-out');
+    } else {
+        localStorage.clear();
+        router.push('/');
+        console.log('Dashboard - Logging out');
+    }
 };
 
 const showCreateProjectDialog = () => {
@@ -151,7 +198,7 @@ const showCreateProjectDialog = () => {
 };
 
 const handleCreateProject = (projectData) => {
-    console.log('New project created:', projectData);
+    console.log('Dashboard - New project created:', JSON.stringify(projectData, null, 2));
     fetchProjects();
 };
 </script>
@@ -167,8 +214,8 @@ const handleCreateProject = (projectData) => {
                 <Button label="Projects" class="dashboard-button" />
             </div>
             <div class="icons">
-                <i class="pi pi-globe"></i>
-                <i class="pi pi-moon"></i>
+                <Button icon="pi pi-moon" class="icon-button" size="large" rounded @click="handleIconClick('moon')" />
+                <Button icon="pi pi-globe" class="icon-button" size="large" rounded @click="handleIconClick('globe')" />
                 <Button icon="pi pi-sign-out" class="out-button" size="large" rounded aria-label="login-out" @click="login_out" />
             </div>
         </div>
@@ -217,6 +264,11 @@ const handleCreateProject = (projectData) => {
                 </div>
             </div>
         </div>
+
+        <ProjectInfo 
+            :show="rickrollDialogVisible" 
+            @update:show="rickrollDialogVisible = $event" 
+        />
 
         <ProfileDialog 
             :show="dialogVisible" 
@@ -314,20 +366,41 @@ html, body, .layout {
     background: #24b4ac;
 }
 
-.icons i {
-    font-size: 18px;
+.icons {
+    display: flex;
+    align-items: center;
+}
+
+.icon-button {
+    background: #1D5C57;
+    border: none;
+    color: white;
     margin-left: 15px;
     margin-right: 15px;
-    margin-top: 20px;
-    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-button:hover {
+    background: #24b4ac;
+    border: none !important;
 }
 
 .out-button {
-    background-color: #1D5C57;
+    background: #1D5C57;
     border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
 }
 
 .out-button:hover {
+    background: #24b4ac;
     border: none !important;
 }
 
@@ -377,7 +450,7 @@ html, body, .layout {
     gap: 10px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
-    height: 100%; /* 5 строк по 100px + 4 промежутка по 10px */
+    height: 100%;
     width: 100%;
     padding-bottom: 10px;
 }
@@ -402,7 +475,7 @@ html, body, .layout {
     grid-template-rows: repeat(5, 100px);
     gap: 10px;
     flex-shrink: 0;
-    width: 100%; /* Ширина слайда равна контейнеру */
+    width: 100%;
     height: 100%;
 }
 

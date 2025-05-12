@@ -18,9 +18,9 @@
     <div class="task-list">
       <div v-if="loadingTasks" class="loading-tasks">Loading tasks...</div>
       <div v-else-if="tasksError" class="tasks-error">Failed to load tasks</div>
-      <div v-else-if="!sprintData.tasks?.length" class="no-tasks">No tasks assigned</div>
-      <div v-else class="task-item" v-for="task in sprintData.tasks" :key="task.id" @click="showTaskDetails(task)">
-        <div class="task-content" :class="getPriorityClass(task.priority)">
+      <div v-else-if="!sortedTasks.length" class="no-tasks">No tasks assigned</div>
+      <div v-else class="task-item" v-for="task in sortedTasks" :key="task.id" @click="showTaskDetails(task)">
+        <div class="task-content" :class="[getPriorityClass(task.priority), { 'not-mine': !task.is_mine }]">
           <span class="task-name">{{ task.name }}</span>
           <span class="task-priority">{{ formatPriority(task.priority) }}</span>
         </div>
@@ -55,30 +55,63 @@ const sprintData = ref(props.sprintData);
 const loadingTasks = ref(false);
 const tasksError = ref(null);
 
+// Сортировка задач
+const sortedTasks = computed(() => {
+  if (!Array.isArray(sprintData.value.tasks)) {
+    console.warn('SprintDetails - tasks is not an array:', sprintData.value.tasks);
+    return [];
+  }
+
+  const priorityOrder = {
+    HIGH: 3,
+    MEDIUM: 2,
+    LOW: 1,
+  };
+
+  const sorted = [...sprintData.value.tasks].sort((a, b) => {
+    const aPriority = priorityOrder[a.priority?.toUpperCase()] || 0;
+    const bPriority = priorityOrder[b.priority?.toUpperCase()] || 0;
+
+    // Сначала задачи с is_mine: true, затем is_mine: false
+    if (a.is_mine && !b.is_mine) return -1;
+    if (!a.is_mine && b.is_mine) return 1;
+
+    // Внутри групп сортируем по приоритету (от HIGH к LOW)
+    return bPriority - aPriority;
+  });
+
+  console.log('SprintDetails - Sorted tasks:', JSON.stringify(sorted, null, 2));
+  return sorted;
+});
+
 const fetchSprintDetails = async () => {
   loadingTasks.value = true;
   tasksError.value = null;
   try {
     const data = await getSprintDetails(props.projectId, props.sprintData.id);
+    console.log('SprintDetails - Raw API response:', JSON.stringify(data, null, 2));
     sprintData.value = {
       ...sprintData.value,
       id: data.id,
       name: data.name,
       description: data.description,
-      tasks: data.tasks || [],
+      tasks: Array.isArray(data.tasks) ? data.tasks : [],
       start_time: data.start_at,
       end_time: data.end_at,
       done_percents: data.done_percents,
     };
-    console.log('SprintDetails - Fetched sprint details for ID:', props.sprintData.id, JSON.stringify(sprintData.value, null, 2));
-    // Логируем приоритеты задач
-    if (data.tasks) {
-      data.tasks.forEach(task => {
-        console.log(`SprintDetails - Task ID: ${task.id}, Priority: ${task.priority}`);
+    console.log('SprintDetails - Updated sprintData:', JSON.stringify(sprintData.value, null, 2));
+    // Логируем приоритеты и is_mine для задач
+    if (Array.isArray(sprintData.value.tasks)) {
+      sprintData.value.tasks.forEach(task => {
+        console.log(`SprintDetails - Task ID: ${task.id}, Priority: ${task.priority}, is_mine: ${task.is_mine}`);
       });
+    } else {
+      console.warn('SprintDetails - No valid tasks array in sprintData');
     }
   } catch (error) {
     tasksError.value = error;
+    console.error('SprintDetails - Error fetching sprint details:', JSON.stringify(error, null, 2));
     toast.add({
       severity: 'error',
       summary: 'Error',
@@ -121,6 +154,16 @@ const editSprint = () => {
 };
 
 const showTaskDetails = (task) => {
+  if (!task.is_mine) {
+    console.log('SprintDetails - Attempt to open non-owned task ID:', task.id);
+    toast.add({
+      severity: 'warn',
+      summary: 'Access Denied',
+      detail: 'You cannot open tasks that are not assigned to you',
+      life: 3000,
+    });
+    return;
+  }
   console.log('SprintDetails - Showing task details for task ID:', task.id);
   emit('show-task-details', task);
 };
@@ -306,11 +349,18 @@ const getPriorityClass = (priority) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  cursor: pointer; /* Указываем, что элемент кликабельный */
 }
 
-.task-item:hover .task-content {
-  transform: translateY(-2px); /* Эффект при наведении */
+.task-item:not(.not-mine) {
+  cursor: pointer; /* Кликабельно только для своих задач */
+}
+
+.task-item.not-mine {
+  cursor: not-allowed; /* Курсор для чужих задач */
+}
+
+.task-item:hover .task-content:not(.not-mine) {
+  transform: translateY(-2px); /* Эффект при наведении только для своих задач */
 }
 
 .task-content {
@@ -337,6 +387,18 @@ const getPriorityClass = (priority) => {
 
 .task-content.priority-high {
   background: linear-gradient(to right, #1F9D9B 50%, #dc3545 50%);
+}
+
+.task-content.not-mine.priority-low {
+  background: linear-gradient(to right, #909090 50%, #28a745 50%);
+}
+
+.task-content.not-mine.priority-medium {
+  background: linear-gradient(to right, #909090 50%, #ffc107 50%);
+}
+
+.task-content.not-mine.priority-high {
+  background: linear-gradient(to right, #909090 50%, #dc3545 50%);
 }
 
 .task-name {

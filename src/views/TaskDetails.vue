@@ -72,7 +72,7 @@ const props = defineProps({
   projectData: { type: Object, required: true }, // Для доступа к others
 });
 
-const emit = defineEmits(['close-details']);
+const emit = defineEmits(['close-details', 'task-status-changed']);
 
 const taskData = ref(props.taskData);
 const participants = ref([]);
@@ -187,6 +187,12 @@ const setStatus = async (value) => {
       summary: 'Status Updated',
       detail: `Task status changed to ${value}`,
       life: 3000,
+    });
+    // Отправляем событие для обновления спринтов
+    emit('task-status-changed', {
+      taskId: taskData.value.id,
+      sprintId: props.sprintId,
+      newStatus: value,
     });
   } catch (error) {
     console.error(`TaskDetails - Failed to change status to ${value}:`, error);

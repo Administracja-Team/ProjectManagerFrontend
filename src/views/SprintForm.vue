@@ -8,62 +8,64 @@
         />
         <h3 class="sprint-title">New sprint</h3>
         <div class="sprint-form">
-            <div class="form-label">Name</div>
-            <InputText 
-                v-model="sprintName" 
-                class="form-input" 
-                placeholder="Sprint name" 
-            />
-            <div class="form-label">Description</div>
-            <Textarea 
-                v-model="sprintDescription" 
-                class="form-textarea" 
-                placeholder="Sprint description" 
-                :auto-resize="true" 
-                rows="4" 
-            />
-            <div class="form-label">Work period</div>
-            <div class="date-pickers">
-                <Calendar 
-                    v-model="sprintStartDate" 
-                    :show-icon="true" 
-                    placeholder="Start date" 
-                    date-format="dd/mm/yy" 
+            <div class="form-content">
+                <div class="form-label">Name</div>
+                <InputText 
+                    v-model="sprintName" 
+                    class="form-input" 
+                    placeholder="Sprint name" 
                 />
-                <Calendar 
-                    v-model="sprintEndDate" 
-                    :show-icon="true" 
-                    placeholder="End date" 
-                    date-format="dd/mm/yy" 
+                <div class="form-label">Description</div>
+                <Textarea 
+                    v-model="sprintDescription" 
+                    class="form-textarea" 
+                    placeholder="Sprint description" 
+                    :auto-resize="true" 
+                    rows="4" 
                 />
-            </div>
-            <div class="form-label">Tasks</div>
-            <div class="selected-tasks">
-                <div 
-                    v-for="task in tasks" 
-                    :key="task.name" 
-                    class="task-row"
-                >
-                    <div 
-                        class="selected-task-item"
-                        :class="getPriorityClass(task.priority)"
-                        @click="editTask(task)"
-                    >
-                        <span class="selected-task-name">{{ task.name }}</span>
-                        <span class="selected-task-deadline">{{ formatDeadline(task.end_at) }}</span>
-                    </div>
-                    <Button 
-                        icon="pi pi-times" 
-                        class="remove-task-button" 
-                        @click.stop="removeTask(task)" 
+                <div class="form-label">Work period</div>
+                <div class="date-pickers">
+                    <Calendar 
+                        v-model="sprintStartDate" 
+                        :show-icon="true" 
+                        placeholder="Start date" 
+                        date-format="dd/mm/yy" 
+                    />
+                    <Calendar 
+                        v-model="sprintEndDate" 
+                        :show-icon="true" 
+                        placeholder="End date" 
+                        date-format="dd/mm/yy" 
                     />
                 </div>
+                <div class="form-label">Tasks</div>
+                <div class="selected-tasks">
+                    <div 
+                        v-for="task in tasks" 
+                        :key="task.name" 
+                        class="task-row"
+                    >
+                        <div 
+                            class="selected-task-item"
+                            :class="getPriorityClass(task.priority)"
+                            @click="editTask(task)"
+                        >
+                            <span class="selected-task-name">{{ task.name }}</span>
+                            <span class="selected-task-deadline">{{ formatDeadline(task.end_at) }}</span>
+                        </div>
+                        <Button 
+                            icon="pi pi-times" 
+                            class="remove-task-button" 
+                            @click.stop="removeTask(task)" 
+                        />
+                    </div>
+                </div>
+                <Button 
+                    label="Add task" 
+                    class="add-task-button" 
+                    @click="showTaskForm = true" 
+                />
             </div>
-            <Button 
-                label="Add task" 
-                class="add-task-button" 
-                @click="showTaskForm = true" 
-            />
             <Button 
                 label="Create a sprint" 
                 class="create-sprint-button" 
@@ -157,7 +159,12 @@ const participants = computed(() => {
 });
 
 const addTask = (task) => {
-    tasks.value.push(task);
+    const taskWithDescription = {
+        ...task,
+        description: task.description ?? '', // Гарантируем строку
+    };
+    tasks.value.push(taskWithDescription);
+    console.log('SprintForm - Task added:', JSON.stringify(taskWithDescription, null, 2));
     toast.add({ severity: 'success', summary: 'Task Added', detail: `${task.name} added to sprint`, life: 3000 });
 };
 
@@ -172,9 +179,14 @@ const editTask = (task) => {
 };
 
 const updateTask = ({ originalName, updatedTask }) => {
+    const updatedTaskWithDescription = {
+        ...updatedTask,
+        description: updatedTask.description ?? '', // Гарантируем строку
+    };
     tasks.value = tasks.value.map(task => 
-        task.name === originalName ? updatedTask : task
+        task.name === originalName ? updatedTaskWithDescription : task
     );
+    console.log('SprintForm - Task updated:', JSON.stringify(updatedTaskWithDescription, null, 2));
     editingTask.value = null;
     showTaskForm.value = false;
     toast.add({ severity: 'success', summary: 'Task Updated', detail: `${updatedTask.name} updated`, life: 3000 });
@@ -213,6 +225,19 @@ const handleCreateSprint = async () => {
         return;
     }
 
+    // Проверка description в задачах
+    const invalidTasks = tasks.value.filter(task => task.description == null);
+    if (invalidTasks.length > 0) {
+        console.warn('SprintForm - Tasks with missing description:', JSON.stringify(invalidTasks, null, 2));
+        toast.add({ 
+            severity: 'warn', 
+            summary: 'Validation Error', 
+            detail: 'All tasks must have a description (can be empty)', 
+            life: 3000 
+        });
+        return;
+    }
+
     let projectId = props.projectData.project_id || props.projectData.id;
     if (!projectId && route.params.id) {
         projectId = Number(route.params.id);
@@ -227,7 +252,12 @@ const handleCreateSprint = async () => {
     const sprint = {
         name: sprintName.value,
         description: sprintDescription.value || '',
-        tasks: tasks.value,
+        tasks: tasks.value.map(task => ({
+            ...task,
+            description: task.description ?? '', // Гарантируем строку
+            priority: task.priority.toUpperCase(), // Унифицируем приоритет
+            implementer_member_ids: task.implementer_member_ids || [],
+        })),
         start_at: sprintStartDate.value ? new Date(sprintStartDate.value).toISOString() : null,
         end_at: sprintEndDate.value ? new Date(sprintEndDate.value).toISOString() : null,
     };
@@ -287,7 +317,7 @@ const resetForm = () => {
 };
 
 const getPriorityClass = (priority) => {
-    switch (priority) {
+    switch (priority?.toUpperCase()) {
         case 'LOW': return 'priority-low';
         case 'MEDIUM': return 'priority-medium';
         case 'HIGH': return 'priority-high';
@@ -316,6 +346,8 @@ const formatDeadline = (endAt) => {
     box-sizing: border-box;
     border-top-right-radius: 10px;
     border-bottom-right-radius: 10px;
+    position: relative;
+    max-height: 80vh;
 }
 
 .sprint-close-button {
@@ -339,6 +371,19 @@ const formatDeadline = (endAt) => {
     flex-direction: column;
     gap: 10px;
     flex: 1;
+    position: relative;
+}
+
+.form-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    height: calc(80vh - 150px);
+    min-height: 300px;
+    padding-bottom: 60px;
+    padding-right: 20px;
+    box-sizing: border-box;
 }
 
 .form-label {
@@ -346,15 +391,29 @@ const formatDeadline = (endAt) => {
     font-weight: bold;
     color: #1D5C57;
     text-align: left;
+    flex-shrink: 0;
 }
 
-.form-input, .form-textarea {
+.form-input {
     width: 100%;
     font-size: 14px;
     padding: 8px;
     border-radius: 4px;
     border: 1px solid #ccc;
     box-sizing: border-box;
+    min-height: 36px;
+    flex-shrink: 0;
+}
+
+.form-textarea {
+    width: 100%;
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    min-height: 100px;
+    flex-shrink: 0;
 }
 
 .date-pickers {
@@ -362,27 +421,33 @@ const formatDeadline = (endAt) => {
     flex-direction: column;
     gap: 10px;
     width: 100%;
+    flex-shrink: 0;
 }
 
 .date-pickers :deep(.p-calendar) {
     width: 100%;
+    min-height: 36px;
 }
 
 .date-pickers :deep(.p-inputtext) {
     width: 100%;
     box-sizing: border-box;
+    min-height: 36px;
 }
 
 .selected-tasks {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .task-row {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-height: 40px;
+    flex-shrink: 0;
 }
 
 .selected-task-item {
@@ -396,6 +461,7 @@ const formatDeadline = (endAt) => {
     transition: transform 0.2s;
     flex: 1;
     line-height: 1.3;
+    min-height: 32px;
 }
 
 .selected-task-item:hover {
@@ -440,6 +506,7 @@ const formatDeadline = (endAt) => {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .remove-task-button:hover {
@@ -456,6 +523,8 @@ const formatDeadline = (endAt) => {
     padding: 0;
     cursor: pointer;
     width: 70px;
+    min-height: 24px;
+    flex-shrink: 0;
 }
 
 .add-task-button:hover {
@@ -470,8 +539,13 @@ const formatDeadline = (endAt) => {
     font-size: 16px;
     padding: 10px;
     border-radius: 12px;
-    margin-top: auto;
+    position: sticky;
+    bottom: 0;
+    width: 100%;
     text-align: center;
+    z-index: 10;
+    min-height: 40px;
+    flex-shrink: 0;
 }
 
 .create-sprint-button:hover {

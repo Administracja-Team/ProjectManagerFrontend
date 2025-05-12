@@ -175,7 +175,7 @@ const props = defineProps({
     show: { type: Boolean, default: false },
     participants: { type: Array, default: () => [] },
     task: { type: Object, default: null },
-    mode: { type: String, default: 'create' }, // 'create' или 'edit'
+    mode: { type: String, default: 'create' },
 });
 
 const emit = defineEmits(['update:show', 'add-task', 'update-task']);
@@ -191,19 +191,16 @@ const searchQuery = ref('');
 const selectedParticipants = ref([]);
 const originalTaskName = ref(null);
 
-// Опции приоритета
 const priorityOptions = ref([
     { label: 'Low', value: 'Low' },
     { label: 'Medium', value: 'Medium' },
     { label: 'High', value: 'High' }
 ]);
 
-// Храним URL аватаров и состояние загрузки
 const avatarUrls = ref({});
 const avatarFailed = ref({});
 const isLoadingAvatars = ref(false);
 
-// Функция сброса формы
 const resetForm = () => {
     taskName.value = '';
     taskDescription.value = '';
@@ -217,10 +214,8 @@ const resetForm = () => {
     originalTaskName.value = null;
 };
 
-// Загрузка аватарок
 const loadAvatars = async () => {
     isLoadingAvatars.value = true;
-    // Очищаем только неиспользуемые blob URL
     const currentMemberIds = new Set(props.participants.map(p => String(p.member_id)).filter(id => id));
     Object.keys(avatarUrls.value).forEach(member_id => {
         if (!currentMemberIds.has(member_id)) {
@@ -252,29 +247,28 @@ const loadAvatars = async () => {
     isLoadingAvatars.value = false;
 };
 
-// Загружаем аватары при изменении participants
 watch(() => props.participants, () => {
     loadAvatars();
 }, { immediate: true, deep: true });
 
-// Инициализация формы при получении задачи
 watch(() => props.task, (newTask) => {
     if (newTask && props.mode === 'edit') {
-        taskName.value = newTask.name;
-        taskDescription.value = newTask.description;
-        taskPriority.value = newTask.priority.charAt(0).toUpperCase() + newTask.priority.slice(1).toLowerCase();
+        taskName.value = newTask.name || '';
+        taskDescription.value = newTask.description || '';
+        taskPriority.value = newTask.priority ? 
+            newTask.priority.charAt(0).toUpperCase() + newTask.priority.slice(1).toLowerCase() : 'Low';
         taskStartDate.value = newTask.start_at ? new Date(newTask.start_at) : null;
         taskEndDate.value = newTask.end_at ? new Date(newTask.end_at) : null;
         originalTaskName.value = newTask.name;
         selectedParticipants.value = props.participants.filter(p => 
-            newTask.implementer_member_ids.includes(Number(p.member_id))
+            newTask.implementer_member_ids?.includes(Number(p.member_id))
         );
+        console.log('TaskDialog - Initialized task for edit:', JSON.stringify(newTask, null, 2));
     } else {
         resetForm();
     }
 }, { immediate: true });
 
-// Список участников с состоянием аватарок, исключая дубликаты
 const participantsWithAvatarStatus = computed(() => {
     const uniqueParticipants = [];
     const seenUsernames = new Set();
@@ -310,7 +304,6 @@ const participantsWithAvatarStatus = computed(() => {
     return uniqueParticipants;
 });
 
-// Фильтрация участников
 const filteredParticipants = computed(() => {
     if (!searchQuery.value) return participantsWithAvatarStatus.value;
     const query = searchQuery.value.toLowerCase();
@@ -364,6 +357,8 @@ const createTask = () => {
             .filter(p => p.member_id != null)
             .map(p => Number(p.member_id)),
     };
+
+    console.log('TaskDialog - Creating task:', JSON.stringify(task, null, 2));
 
     if (props.mode === 'edit') {
         emit('update-task', { originalName: originalTaskName.value, updatedTask: task });

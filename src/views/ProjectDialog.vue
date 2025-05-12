@@ -19,7 +19,7 @@
           <span class="creator-name">{{ projectData.ownerFullName || projectData.owner || 'Creator Name' }}</span>
         </div>
         <div class="term-label">Term of work</div>
-        <div class="term-date">TBD</div>
+        <div class="term-date">{{ formatTermOfWork(projectData.created_at) }}</div>
         <div class="goal-label">Project goal and description</div>
         <div v-if="!isEditingDescription" class="goal-text">
           {{ projectData.description || 'Description will be added soon...' }}
@@ -70,7 +70,8 @@
         <SprintDetails v-else-if="viewMode === 'sprint-details'" :sprint-data="selectedSprint" :project-id="props.projectId"
           @close-details="viewMode = 'users'" @sprint-deleted="handleSprintDeleted" @show-task-details="handleShowTaskDetails" />
         <TaskDetails v-else-if="viewMode === 'task-details'" :task-data="selectedTask" :project-id="props.projectId"
-          :sprint-id="selectedSprintId" :project-data="projectData" @close-details="viewMode = 'sprint-details'" />
+          :sprint-id="selectedSprintId" :project-data="projectData" @close-details="viewMode = 'sprint-details'"
+          @task-status-changed="handleTaskStatusChanged" />
       </div>
     </div>
   </Dialog>
@@ -117,14 +118,14 @@ const selectedTask = ref(null);
 
 const activeSprints = computed(() => {
   const sprintsList = sprints.value
-    .filter(sprint => !sprint.is_ended)
-    .sort((a, b) => a.id - b.id); // Сортировка по id (старые выше)
+    .filter(sprint => !(sprint.done_percents === 100 && sprint.is_started))
+    .sort((a, b) => a.id - b.id);
   console.log('ProjectDialog - Computed activeSprints:', JSON.stringify(sprintsList, null, 2));
   return sprintsList;
 });
 
 const completedSprints = computed(() => {
-  const completed = sprints.value.filter(sprint => sprint.is_ended);
+  const completed = sprints.value.filter(sprint => sprint.done_percents === 100 && sprint.is_started);
   console.log('ProjectDialog - Computed completedSprints:', JSON.stringify(completed, null, 2));
   return completed;
 });
@@ -134,6 +135,18 @@ const selectedSprint = computed(() => {
   console.log('ProjectDialog - Computed selectedSprint for ID:', selectedSprintId.value, JSON.stringify(sprint, null, 2));
   return sprint;
 });
+
+// Функция для загрузки спринтов
+const fetchProjectSprints = async () => {
+  try {
+    const updatedSprints = await getProjectSprints(props.projectId);
+    console.log('ProjectDialog - Fetched updated sprints:', JSON.stringify(updatedSprints, null, 2));
+    sprints.value = updatedSprints;
+  } catch (err) {
+    console.warn('ProjectDialog - Failed to fetch sprints:', err);
+    toast.add({ severity: 'warn', summary: 'Warning', detail: 'Failed to load sprints', life: 3000 });
+  }
+};
 
 const fetchProjectDetails = async () => {
   if (!props.projectId) return;
@@ -145,14 +158,7 @@ const fetchProjectDetails = async () => {
     console.log('ProjectDialog - Fetched project details:', JSON.stringify(details, null, 2));
 
     // Получаем спринты
-    try {
-      sprints.value = await getProjectSprints(props.projectId);
-      console.log('ProjectDialog - Fetched sprints:', JSON.stringify(sprints.value, null, 2));
-    } catch (err) {
-      console.warn('ProjectDialog - Failed to fetch sprints:', err);
-      sprints.value = [];
-      toast.add({ severity: 'warn', summary: 'Warning', detail: 'Failed to load sprints', life: 3000 });
-    }
+    await fetchProjectSprints();
 
     // Получаем данные текущего пользователя
     const userData = await getUserData();
@@ -215,6 +221,7 @@ const fetchProjectDetails = async () => {
       owner: owner,
       ownerFullName: ownerFullName,
       description: details.project.description || '',
+      created_at: details.project.created_at,
       others,
     };
     console.log('ProjectDialog - projectData:', JSON.stringify(projectData.value, null, 2));
@@ -224,6 +231,29 @@ const fetchProjectDetails = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// Форматирование срока работы
+const formatTermOfWork = (createdAt) => {
+  if (!createdAt) return 'No start date';
+  const startDate = new Date(createdAt);
+  const currentDate = new Date();
+  return `${startDate.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  })} - ${currentDate.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  })}`;
+};
+
+// Обработка изменения статуса задачи
+const handleTaskStatusChanged = (event) => {
+  console.log('ProjectDialog - Task status changed:', JSON.stringify(event, null, 2));
+  // Обновляем спринты
+  fetchProjectSprints();
 };
 
 const handleSprintCreated = (newSprint) => {
@@ -238,7 +268,7 @@ const handleSprintCreated = (newSprint) => {
     end_time: newSprint.end_at || null,
     is_ended: false,
     is_started: newSprint.start_at ? new Date(newSprint.start_at) <= new Date() : true,
-    done_percents: 0, // Начальный прогресс для нового спринта
+    done_percents: 0,
   };
   console.log('ProjectDialog - Adding shortSprint:', JSON.stringify(shortSprint, null, 2));
   sprints.value = [...sprints.value, shortSprint];
@@ -247,9 +277,7 @@ const handleSprintCreated = (newSprint) => {
 
 const handleSprintDeleted = (sprintId) => {
   console.log(`ProjectDialog - Handling sprint deletion for sprintId: ${sprintId}`);
-  // Приводим sprintId к числу для корректного сравнения
   const idToDelete = Number(sprintId);
-  // Создаём новый массив, исключая удалённый спринт
   sprints.value = sprints.value.filter(sprint => sprint.id !== idToDelete);
   console.log('ProjectDialog - Updated sprints after deletion:', JSON.stringify(sprints.value, null, 2));
 };
@@ -385,7 +413,7 @@ watch(visible, (newVal) => {
   overflow-y: auto;
   position: relative;
   background: #f0f0f0;
-  max-height: 80vh; /* Ограничиваем высоту для прокрутки */
+  max-height: 80vh;
 }
 
 .users-info {
@@ -555,7 +583,7 @@ watch(visible, (newVal) => {
 
 .no-sprint-text {
   font-size: 14px;
-  color: white;
+  color: #666;
 }
 
 .sprint-details {
