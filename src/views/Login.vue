@@ -155,9 +155,8 @@ onMounted(() => {
   </div>
 </template>
 
-
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;700&display=swap');
 
 .login-container {
     width: 100%;
@@ -181,10 +180,10 @@ onMounted(() => {
   border: 5px solid #1F9D9B;
 }
 
-h1{
+h1 {
   color: #F3EFEF;
   font-size: 32px;
-  font-family: 'Source Sans Pro', sans-serif;
+  font-family: 'Source Sans 3', sans-serif;
 }
 
 .input-field {
@@ -193,7 +192,7 @@ h1{
   margin-bottom: 1rem;
   font-size: 24px;
   font-weight: 600;
-  font-family: 'Source Sans Pro', sans-serif;
+  font-family: 'Source Sans 3', sans-serif;
 }
 
 .remember-me {
@@ -206,20 +205,20 @@ h1{
   font-weight: 600;
   font-size: 18px;
   color: #FFFFFF;
-  font-family: 'Source Sans Pro', sans-serif;
+  font-family: 'Source Sans 3', sans-serif;
 }
 
-.login-button{
+.login-button {
   color: #F3EFEF;
-  font-family: 'Source Sans Pro', sans-serif !important;
+  font-family: 'Source Sans 3', sans-serif !important;
   font-size: 24px !important;
   width: 300px;
   margin-top: 20px;
 }
 
-.register-button{
+.register-button {
   color: #F3EFEF;
-  font-family: 'Source Sans Pro', sans-serif !important;
+  font-family: 'Source Sans 3', sans-serif !important;
   width: 300px;
   margin-top: 20px;
   font-size: 24px !important;

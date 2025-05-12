@@ -120,6 +120,7 @@ const applyPasswordChange = async () => {
 .change-password-dialog {
     background: #f0f0f0;
     border-radius: 10px;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .dialog-content {

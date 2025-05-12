@@ -247,6 +247,7 @@ const getPriorityClass = (priority) => {
 
 <style scoped>
 .task-details-container {
+  font-family: 'Source Sans 3', sans-serif;
   flex: 1;
   padding: 20px;
   background: #f0f0f0;

@@ -47,6 +47,7 @@ const confirm = useConfirm();
 const props = defineProps({
   sprintData: { type: Object, required: true },
   projectId: { type: Number, required: true },
+  isOwner: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['close-details', 'sprint-deleted', 'show-task-details']);
@@ -124,7 +125,7 @@ const fetchSprintDetails = async () => {
 };
 
 onMounted(() => {
-  console.log('SprintDetails - Mounted with sprint ID:', props.sprintData.id);
+  console.log('SprintDetails - Mounted with sprint ID:', props.sprintData.id, 'isOwner:', props.isOwner);
   fetchSprintDetails();
 });
 
@@ -154,7 +155,7 @@ const editSprint = () => {
 };
 
 const showTaskDetails = (task) => {
-  if (!task.is_mine) {
+  if (!task.is_mine && !props.isOwner) {
     console.log('SprintDetails - Attempt to open non-owned task ID:', task.id);
     toast.add({
       severity: 'warn',
@@ -164,7 +165,7 @@ const showTaskDetails = (task) => {
     });
     return;
   }
-  console.log('SprintDetails - Showing task details for task ID:', task.id);
+  console.log('SprintDetails - Showing task details for task ID:', task.id, 'isOwner:', props.isOwner);
   emit('show-task-details', task);
 };
 
@@ -264,6 +265,7 @@ const getPriorityClass = (priority) => {
 
 <style scoped>
 .sprint-details-container {
+  font-family: 'Source Sans 3', sans-serif;
   flex: 1;
   padding: 20px;
   background: #f0f0f0;
@@ -351,16 +353,16 @@ const getPriorityClass = (priority) => {
   gap: 10px;
 }
 
-.task-item:not(.not-mine) {
-  cursor: pointer; /* Кликабельно только для своих задач */
+.task-item:not(.not-mine), .task-item.is-owner {
+  cursor: pointer; /* Кликабельно для своих задач или для OWNER */
 }
 
-.task-item.not-mine {
-  cursor: not-allowed; /* Курсор для чужих задач */
+.task-item.not-mine:not(.is-owner) {
+  cursor: not-allowed; /* Курсор для чужих задач, если не OWNER */
 }
 
-.task-item:hover .task-content:not(.not-mine) {
-  transform: translateY(-2px); /* Эффект при наведении только для своих задач */
+.task-item:hover .task-content:not(.not-mine), .task-item:hover .task-content.is-owner {
+  transform: translateY(-2px); /* Эффект при наведении для своих задач или OWNER */
 }
 
 .task-content {

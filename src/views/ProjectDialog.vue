@@ -68,7 +68,8 @@
         <SprintForm v-else-if="viewMode === 'sprint'" :project-data="projectData" @close-form="viewMode = 'users'"
           @sprint-created="handleSprintCreated" />
         <SprintDetails v-else-if="viewMode === 'sprint-details'" :sprint-data="selectedSprint" :project-id="props.projectId"
-          @close-details="viewMode = 'users'" @sprint-deleted="handleSprintDeleted" @show-task-details="handleShowTaskDetails" />
+          :is-owner="isOwner" @close-details="viewMode = 'users'" @sprint-deleted="handleSprintDeleted"
+          @show-task-details="handleShowTaskDetails" />
         <TaskDetails v-else-if="viewMode === 'task-details'" :task-data="selectedTask" :project-id="props.projectId"
           :sprint-id="selectedSprintId" :project-data="projectData" @close-details="viewMode = 'sprint-details'"
           @task-status-changed="handleTaskStatusChanged" />
@@ -189,7 +190,7 @@ const fetchProjectDetails = async () => {
     }
 
     // Если текущий пользователь - участник (MEMBER), добавляем его в список
-    isOwner.value = details.system_role === 'OWNER';
+    isOwner.value = details.system_role === 'OWNER' || details.system_role === 'ADMIN';
     if (details.system_role === 'MEMBER') {
       const isCurrentUserInOthers = others.some(member => member.user.username === currentUser.username);
       if (!isCurrentUserInOthers) {
@@ -386,6 +387,7 @@ watch(visible, (newVal) => {
   background: #f0f0f0;
   border-radius: 10px;
   padding: 0;
+  font-family: 'Source Sans 3', sans-serif;
 }
 
 /* Переопределяем PrimeVue */

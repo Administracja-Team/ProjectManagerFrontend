@@ -54,9 +54,6 @@
     </div>
 </template>
 
-
-
-
 <script setup>
 import { ref, onMounted } from 'vue';
 import Avatar from 'primevue/avatar';
@@ -104,7 +101,7 @@ const gotoHome = () => {
 .layout {
     display: flex;
     flex-direction: column;
-    font-family: Arial, sans-serif;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 /* Верхняя панель */

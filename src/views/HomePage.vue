@@ -309,7 +309,7 @@ html, body, .layout {
 .layout {
     display: flex;
     flex-direction: column;
-    font-family: Arial, sans-serif;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 /* Верхняя панель */

@@ -89,9 +89,7 @@ const setRoles = async () => {
     console.log('Request body for system role:', { payload: roleToSet });
     console.log('Request body for descriptive role:', { payload: descriptiveRole.value || '' });
     try {
-        // Установка system_role
         await setSystemRole(props.memberId, roleToSet);
-        // Установка descriptive_role
         await setDescriptiveRole(props.memberId, descriptiveRole.value || '');
         toast.add({
             severity: 'success',
@@ -169,17 +167,21 @@ watch(() => props.show, (newVal) => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3&display=swap');
+
 .set-role-dialog {
     background: #ffffff;
     border-radius: 10px;
     padding: 0;
     margin: 0;
     z-index: 1000;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 :deep(.p-dialog) {
     padding: 0 !important;
     margin: 0 !important;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 :deep(.p-dialog-content) {
@@ -187,6 +189,7 @@ watch(() => props.show, (newVal) => {
     background: #ffffff;
     border-radius: 10px;
     overflow: hidden;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .role-form-container {
@@ -199,6 +202,7 @@ watch(() => props.show, (newVal) => {
     box-sizing: border-box;
     height: 100%;
     overflow-y: auto;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .close-button {
@@ -209,6 +213,7 @@ watch(() => props.show, (newVal) => {
     border: none;
     color: #1D5C57;
     font-size: 18px;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .role-title {
@@ -216,12 +221,14 @@ watch(() => props.show, (newVal) => {
     color: #1D5C57;
     margin: 0;
     text-align: center;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .role-headers {
     display: flex;
     justify-content: space-between;
     gap: 10px;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .system-role-header,
@@ -231,6 +238,7 @@ watch(() => props.show, (newVal) => {
     margin: 0;
     flex: 1;
     text-align: center;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .role-fields {
@@ -238,6 +246,7 @@ watch(() => props.show, (newVal) => {
     flex-direction: row;
     justify-content: space-between;
     gap: 10px;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .system-role-dropdown,
@@ -248,6 +257,7 @@ watch(() => props.show, (newVal) => {
     border-radius: 4px;
     border: 1px solid #ccc;
     box-sizing: border-box;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .set-button {
@@ -259,6 +269,7 @@ watch(() => props.show, (newVal) => {
     border-radius: 12px;
     margin-top: auto;
     text-align: center;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .set-button:hover {

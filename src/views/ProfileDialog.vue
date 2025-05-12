@@ -238,6 +238,7 @@ const showChangePasswordDialog = () => {
     margin: 0;
     padding: 0;
     background: #f0f0f0;
+    font-family: 'Source Sans 3', sans-serif;
 }
 
 .dialog-content {
