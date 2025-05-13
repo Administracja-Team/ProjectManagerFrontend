@@ -119,14 +119,14 @@ const selectedTask = ref(null);
 
 const activeSprints = computed(() => {
   const sprintsList = sprints.value
-    .filter(sprint => !(sprint.done_percents === 100 && sprint.is_started))
+    .filter(sprint => !sprint.is_ended || sprint.done_percents < 100)
     .sort((a, b) => a.id - b.id);
   console.log('ProjectDialog - Computed activeSprints:', JSON.stringify(sprintsList, null, 2));
   return sprintsList;
 });
 
 const completedSprints = computed(() => {
-  const completed = sprints.value.filter(sprint => sprint.done_percents === 100 && sprint.is_started);
+  const completed = sprints.value.filter(sprint => sprint.is_ended && sprint.done_percents === 100);
   console.log('ProjectDialog - Computed completedSprints:', JSON.stringify(completed, null, 2));
   return completed;
 });
@@ -141,8 +141,14 @@ const selectedSprint = computed(() => {
 const fetchProjectSprints = async () => {
   try {
     const updatedSprints = await getProjectSprints(props.projectId);
-    console.log('ProjectDialog - Fetched updated sprints:', JSON.stringify(updatedSprints, null, 2));
-    sprints.value = updatedSprints;
+    console.log('ProjectDialog - Raw API sprints:', JSON.stringify(updatedSprints, null, 2));
+    sprints.value = updatedSprints.map(sprint => ({
+      ...sprint,
+      done_percents: Math.round(Number(sprint.done_percents)) || 0, // Преобразуем доли в проценты
+      is_started: sprint.is_started ?? (sprint.start_time ? new Date(sprint.start_time) <= new Date() : false),
+      is_ended: sprint.is_ended ?? false,
+    }));
+    console.log('ProjectDialog - Normalized sprints:', JSON.stringify(sprints.value, null, 2));
   } catch (err) {
     console.warn('ProjectDialog - Failed to fetch sprints:', err);
     toast.add({ severity: 'warn', summary: 'Warning', detail: 'Failed to load sprints', life: 3000 });
@@ -251,10 +257,10 @@ const formatTermOfWork = (createdAt) => {
 };
 
 // Обработка изменения статуса задачи
-const handleTaskStatusChanged = (event) => {
+const handleTaskStatusChanged = async (event) => {
   console.log('ProjectDialog - Task status changed:', JSON.stringify(event, null, 2));
   // Обновляем спринты
-  fetchProjectSprints();
+  await fetchProjectSprints();
 };
 
 const handleSprintCreated = (newSprint) => {
