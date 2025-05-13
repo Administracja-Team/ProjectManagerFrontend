@@ -19,17 +19,24 @@ api.interceptors.request.use(config => {
 export default api;
 
 export const registerUser = async (userData: any, avatarFile?: File) => {
-    const formData = new FormData();
-    formData.append("user", JSON.stringify(userData));
-    formData.append("avatar", avatarFile);
+  const formData = new FormData();
+  formData.append('user', JSON.stringify(userData));
+  // Добавляем avatar только если файл предоставлен
+  if (avatarFile) {
+    formData.append('avatar', avatarFile);
+  }
 
-    try {
-        const response = await api.post("/authorization/register", formData);
-        return response.data;
-    } catch (error) {
-        console.error("Registration failed:", error.response?.data || error);
-        throw error;
-    }
+  try {
+    const response = await api.post('/authorization/register', formData, {
+      headers: {
+        // Не устанавливаем Content-Type, axios автоматически установит multipart/form-data
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Registration failed:', error.response?.data || error);
+    throw error; // Перебрасываем ошибку для обработки в компоненте
+  }
 };
 
 export const loginUser = async (identifier: string, password: string) => {

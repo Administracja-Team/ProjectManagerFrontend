@@ -2,7 +2,7 @@
 <template>
     <Dialog 
         v-model:visible="visible" 
-        :style="{ width: '24vw', height: '35vh' }" 
+        :style="{ width: '24vw', height: '32vh' }" 
         :modal="true" 
         :draggable="false" 
         :show-header="false" 
@@ -21,7 +21,11 @@
                 <h4 class="descriptive-role-header">Descriptive role</h4>
             </div>
             <div class="role-fields">
+                <div v-if="props.initialSystemRole === 'OWNER'" class="system-role-static">
+                    Owner
+                </div>
                 <Dropdown 
+                    v-else
                     v-model="systemRole" 
                     :options="systemRoleOptions" 
                     option-label="label" 
@@ -89,7 +93,10 @@ const setRoles = async () => {
     console.log('Request body for system role:', { payload: roleToSet });
     console.log('Request body for descriptive role:', { payload: descriptiveRole.value || '' });
     try {
-        await setSystemRole(props.memberId, roleToSet);
+        // Не пытаемся менять systemRole для OWNER
+        if (props.initialSystemRole !== 'OWNER') {
+            await setSystemRole(props.memberId, roleToSet);
+        }
         await setDescriptiveRole(props.memberId, descriptiveRole.value || '');
         toast.add({
             severity: 'success',
@@ -99,49 +106,29 @@ const setRoles = async () => {
         });
         emit('roles-updated', {
             memberId: props.memberId,
-            systemRole: roleToSet,
+            systemRole: props.initialSystemRole === 'OWNER' ? 'OWNER' : roleToSet,
             descriptiveRole: descriptiveRole.value,
         });
         closeDialog();
     } catch (error) {
         const status = error.response?.status;
         console.error('Error setting roles:', error.response?.data || error);
+        let message = 'Failed to update roles';
         if (status === 403) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'You do not have permission to update roles',
-                life: 3000,
-            });
+            message = 'You do not have permission to update roles';
         } else if (status === 404) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Member not found',
-                life: 3000,
-            });
+            message = 'Member not found';
         } else if (status === 400) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Invalid role data provided',
-                life: 3000,
-            });
+            message = error.response?.data?.message || 'Invalid role data provided';
         } else if (status === 500) {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Server error, please try again later',
-                life: 3000,
-            });
-        } else {
-            toast.add({
-                severity: 'error',
-                summary: 'Error',
-                detail: 'Failed to update roles',
-                life: 3000,
-            });
+            message = 'Server error, please try again later';
         }
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: message,
+            life: 3000,
+        });
     }
 };
 
@@ -250,7 +237,8 @@ watch(() => props.show, (newVal) => {
 }
 
 .system-role-dropdown,
-.descriptive-role-input {
+.descriptive-role-input,
+.system-role-static {
     width: 48%;
     font-size: 14px;
     padding: 8px;
@@ -258,6 +246,26 @@ watch(() => props.show, (newVal) => {
     border: 1px solid #ccc;
     box-sizing: border-box;
     font-family: 'Source Sans 3', sans-serif;
+    height: 38px; /* Фиксированная высота для единообразия */
+    display: flex;
+    align-items: center;
+}
+
+.system-role-static {
+    background: #f0f0f0;
+    color: #1D5C57;
+    font-weight: bold;
+    justify-content: center; /* Центрируем текст Owner */
+}
+
+:deep(.p-dropdown) {
+    height: 38px; /* Устанавливаем высоту для Dropdown */
+    display: flex;
+    align-items: center;
+}
+
+:deep(.p-inputtext) {
+    height: 38px; /* Устанавливаем высоту для InputText */
 }
 
 .set-button {
